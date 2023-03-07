@@ -4,6 +4,8 @@ from pathlib import Path
 import multiprocessing
 import zipfile
 
+from tqdm.contrib.concurrent import process_map
+
 
 def _derive_subtiles(src_direction: str, dest_direction: str, degree_step: int):
     src_orientation = src_direction[0]
@@ -146,13 +148,18 @@ def acquire() -> List[str]:
     ]
 
 
-def _extract_dsm_files(zip_path: Path, out_path: Path):
+def _extract_dsm_files(x):
+    zip_path, out_path = x
+
     with zipfile.ZipFile(zip_path, "r") as zip_ref:
         for file in zip_ref.namelist():
             if file.endswith("_DSM.tif"):
                 # Get the indexation of the file name
                 dsm_name = file.split("/")[-1].split("_")[1]
                 out_file_path = out_path / f"{dsm_name}.tif"
+
+                if out_file_path.exists():
+                    continue
 
                 # Extract the file to the output path
                 with open(out_file_path, "wb") as f:
@@ -166,11 +173,11 @@ def extract(path: Path, outpath: Path):
     # Get all of the zip files and extract them with multiprocessing
     zip_files = list(path.glob("*.zip"))
 
-    with multiprocessing.Pool() as pool:
-        pool.starmap(
-            _extract_dsm_files,
-            [(zip_file, outpath) for zip_file in zip_files],
-        )
+    process_map(
+        _extract_dsm_files,
+        [(zip_file, outpath) for zip_file in zip_files],
+        chunksize=1,
+    )
 
 
 if __name__ == "__main__":
