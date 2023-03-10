@@ -1,1 +1,2 @@
 perlin-noise==1.12
+earthengine-api==0.1.343

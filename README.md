@@ -14,3 +14,8 @@ The AW3D30 dataset can be used for a variety of applications, such as terrain an
 
 ### Documentation
 For more information about the AW3D30 dataset, please refer to the official documentation at https://www.eorc.jaxa.jp/ALOS/en/aw3d30/aw3d30v3.2_product_e_e1.0.pdf.
+
+
+### Google Earth
+
+It is assumed user has access to a service account with access to Google Earth API. By default, it is assumed these credentials are placed under `credentials`.

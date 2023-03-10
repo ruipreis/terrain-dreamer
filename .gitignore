@@ -132,3 +132,4 @@ dmypy.json
 # Specific to this project
 AW3D30_DATASET
 nohup.out
+credentials
