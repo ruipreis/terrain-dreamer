@@ -19,3 +19,9 @@ For more information about the AW3D30 dataset, please refer to the official docu
 ### Google Earth
 
 It is assumed user has access to a service account with access to Google Earth API. By default, it is assumed these credentials are placed under `credentials`.
+
+## Requirements
+
+- `apt install libgdal-dev`
+    - The `libgdal-dev` package is required for the `gdal` Python package and should have matching versions.
+- `requirements.txt`
