@@ -1,3 +1,4 @@
+from tqdm import tqdm
 import tempfile
 import urllib
 import ee
@@ -5,6 +6,10 @@ import ray
 
 import zipfile
 from PIL import Image
+
+import logging
+from ray.util.queue import Queue
+from typing import List
 
 
 def initialize_google_earth():
@@ -37,6 +42,9 @@ def slice_gtif(file: Path, out_folder: Path, batch_size: int = 512):
     for i, base_x in enumerate(range(0, band.XSize, batch_size)):
         for j, base_y in enumerate(range(0, band.YSize, batch_size)):
             out_path = out_folder / f"{stem}_{i}_{j}.tif"
+
+            if out_path.exists():
+                continue
 
             gdal.Translate(
                 str(out_path), gtif, srcWin=[base_x, base_y, batch_size, batch_size]
@@ -89,7 +97,8 @@ def gtif_to_satelite(gtif_file: str, out_file: str, scale: int = 25):
         .filterBounds(geom)
         .select(["B4", "B3", "B2"])
         .filter(ee.Filter.calendarRange(2022, 2023, "year"))
-        .filter(ee.Filter.calendarRange(10, 12, "month"))
+        # Less chance of clouds in the summer
+        .filter(ee.Filter.calendarRange(6, 8, "month"))
     )
 
     image = dataset.reduce("median")
@@ -145,3 +154,63 @@ def gtif_to_satelite(gtif_file: str, out_file: str, scale: int = 25):
             rgb = rgb.resize((int(width), int(height)))
 
             rgb.save(out_file)
+
+
+def batch_gtif_to_satelite(
+    in_folder: Path,
+    out_folder: Path,
+    scale: int = 25,
+    n_consumers: int = 10,
+    queue_size: int = 10000,
+):
+    # The main thread will server as the producer, it will read the files from the
+    # input folder and put them in a queue
+
+    # A consumer process that reads data from a queue, initializes google earth engine
+    # and then calls gtif_to_satelite on the data, ends when it receives a None value
+    @ray.remote
+    def _consumer_worker(q: Queue, consumer_id: int):
+        logging.info(
+            f"Consumer {consumer_id} started, initializing Google Earth Engine ..."
+        )
+        ee.Initialize()
+
+        while True:
+            data = q.get()
+
+            if data is None:
+                break
+
+            logging.info(f"Consumer {consumer_id} processing {data}")
+
+            try:
+                gtif_to_satelite(*data, scale=scale)
+            except Exception as e:
+                logging.error(f"Skipping {data} due to processing error: {e}")
+
+    # Create a queue that can hold several files
+    q = Queue(maxsize=queue_size)
+
+    # Create a list of consumers
+    consumer_workers = [_consumer_worker.remote(q, i) for i in range(n_consumers)]
+
+    for idx, file in enumerate(in_folder.glob("*.tif")):
+        out_file = out_folder / (file.stem + ".jpg")
+
+        if out_file.exists():
+            logging.info(f"Skipping {file}, output file already exists")
+            continue
+
+        logging.info(f"Putting index {idx}, {file} in queue")
+        q.put((file, out_file))
+
+    # Put a None value in the queue for each consumer, this will tell the consumer
+    # to stop
+    for _ in consumer_workers:
+        q.put(None)
+
+    logging.info("Done!")
+
+
+if __name__ == "__main__":
+    batch_gtif_to_satelite(Path("/freezer/SPLIT_AW3D30"), Path("/freezer/SAT_AW3D30"))
