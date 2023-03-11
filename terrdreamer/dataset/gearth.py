@@ -1,33 +1,17 @@
-from tqdm import tqdm
+import logging
 import tempfile
 import urllib
-import ee
-import ray
-
 import zipfile
-from PIL import Image
+from pathlib import Path
 
-import logging
-from ray.util.queue import Queue
-from typing import List
-
-
-def initialize_google_earth():
-    # If the auth mode isnt provided, browser mode is used by default.
-    # then rune initialzie without arguments.
-
-    # If initialize fails, run the following commented line without script,
-    # to setup the authentication.
-    # ee.Authenticate()
-
-    ee.Initialize()
-
-
+import ee
 import rasterio
 import rasterio.features
 import rasterio.warp
-from pathlib import Path
+import ray
 from osgeo import gdal
+from PIL import Image
+from ray.util.queue import Queue
 
 
 def slice_gtif(file: Path, out_folder: Path, batch_size: int = 512):
@@ -80,8 +64,6 @@ def gtif_to_geojson(file: Path):
     out_shapes = []
 
     for geom, _ in shapes:
-        # p_geom = rasterio.warp.transform_geom(src.crs, "EPSG:4326", geom, precision=6)
-
         out_shapes.append(geom)
 
     return [ee.Geometry(s).toGeoJSON() for s in out_shapes][0], height, width
@@ -97,36 +79,25 @@ def gtif_to_satelite(gtif_file: str, out_file: str, scale: int = 25):
         .filterBounds(geom)
         .select(["B4", "B3", "B2"])
         .filter(ee.Filter.calendarRange(2022, 2023, "year"))
-        # Less chance of clouds in the summer
-        .filter(ee.Filter.calendarRange(6, 8, "month"))
+        # Get data for the summer months
+        # .filter(ee.Filter.calendarRange(6, 8, "month"))
+        # Make to sure to filter by could percentage < 5%
+        .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 5))
     )
 
-    image = dataset.reduce("median")
-    percentiles = image.reduceRegion(
-        ee.Reducer.percentile([0, 100], ["min", "max"]), geom, scale, bestEffort=True
+    reduction = dataset.median()
+    percentiles = reduction.reduceRegion(
+        ee.Reducer.minMax(), geometry=geom, scale=scale, bestEffort=True
     ).getInfo()
 
-    # Extracting the results is annoying because EE prepends the channel name
-    mymin = [
-        percentiles["B4_median_min"],
-        percentiles["B3_median_min"],
-        percentiles["B2_median_min"],
-    ]
-    mymax = [
-        percentiles["B4_median_max"],
-        percentiles["B3_median_max"],
-        percentiles["B2_median_max"],
-    ]
-
-    minn = max(mymin)
-    maxx = max(mymax)
-
-    NEWRGB = ["B4_median", "B3_median", "B2_median"]
-    reduction = image.visualize(
-        bands=NEWRGB, min=[minn, minn, minn], max=[maxx, maxx, maxx], gamma=1
+    satImg = reduction.visualize(
+        bands=["B4", "B3", "B2"],
+        min=[percentiles["B4_min"], percentiles["B3_min"], percentiles["B3_min"]],
+        max=[percentiles["B4_max"], percentiles["B3_max"], percentiles["B3_max"]],
+        gamma=1,
     )
 
-    path = reduction.getDownloadUrl(
+    path = satImg.getDownloadUrl(
         {
             "scale": scale,
             "crs": "EPSG:4326",
@@ -160,7 +131,7 @@ def batch_gtif_to_satelite(
     in_folder: Path,
     out_folder: Path,
     scale: int = 25,
-    n_consumers: int = 10,
+    n_consumers: int = 20,
     queue_size: int = 10000,
 ):
     # The main thread will server as the producer, it will read the files from the
@@ -208,6 +179,9 @@ def batch_gtif_to_satelite(
     # to stop
     for _ in consumer_workers:
         q.put(None)
+
+    logging.info("Waiting for consumers to finish ...")
+    ray.get(consumer_workers)
 
     logging.info("Done!")
 

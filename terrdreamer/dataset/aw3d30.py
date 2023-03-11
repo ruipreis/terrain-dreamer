@@ -1,8 +1,8 @@
-from typing import List
-import re
-from pathlib import Path
 import multiprocessing
+import re
 import zipfile
+from pathlib import Path
+from typing import List
 
 from tqdm.contrib.concurrent import process_map
 

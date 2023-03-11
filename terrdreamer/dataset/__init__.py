@@ -1,6 +1,7 @@
 import os
-import requests
 from multiprocessing import Pool
+
+import requests
 
 
 def download_file(sample, folder):
@@ -28,6 +29,7 @@ def download(ls, folder):
 
 if __name__ == "__main__":
     import time
+
     from terrdreamer.dataset.aw3d30 import acquire
 
     ls = acquire()
