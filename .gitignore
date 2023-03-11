@@ -133,3 +133,5 @@ dmypy.json
 AW3D30_DATASET
 nohup.out
 credentials
+*.tif
+*.png
