@@ -7,8 +7,6 @@ import random
 class AW3D30Dataset(Dataset):
     _Satellite_mean= 69.27174377441406
     _Satellite_std= 28.41813850402832
-    _GTIF_min= -9999.0
-    _GTIF_max= 7943.0
 
     def __init__(self,path:Path, device, normalize=True, limit=None):
         self._available_files = list(path.glob("*.npz"))
@@ -39,21 +37,29 @@ class AW3D30Dataset(Dataset):
             # Normalize the data
             sat = (sat - self._Satellite_mean) / self._Satellite_std
             
-            # The gtif file uses min-max normalization, the range is now from 0 to 1
-            gtif = (gtif - self._GTIF_min) / (self._GTIF_max - self._GTIF_min)
+            # Apply min max normalization to the dem image
+            min_gtif_value = gtif.min()
+            max_gtif_value = gtif.max()
 
+            gtif = (gtif - min_gtif_value) / (max_gtif_value - min_gtif_value)
+            
+            # Now convert to the range of -1 to 1
+            gtif = gtif * 2 - 1
+
+            # Fill nans with -1
+            gtif[torch.isnan(gtif)] = -1
+                        
         return sat, gtif
     
 from PIL import Image
 
-def tiff_to_jpg(tiff_data,min_value, max_value,scale:int=5,convert:bool=False,out_path=None):
+def tiff_to_jpg(tiff_data, convert:bool=False,out_path=None):
     # Unnormalize the gtif
-    img = (tiff_data * (max_value - min_value) + min_value).squeeze().numpy()
-    img = np.where(img < 0, 0, img)
-    img /= max_value
+    tiff_data = (tiff_data + 1) / 2
+    img = tiff_data.squeeze().numpy()
     
     # Scale the image
-    img = np.minimum(img * scale, 1.0)
+    img = np.maximum(np.minimum(img, 1.0), 0.0)
     
     img = (img * 255).astype(np.uint8)
     
@@ -85,24 +91,7 @@ if __name__ == "__main__":
         from PIL import Image
         
         # Find the first image whose amplitude is greater than 100
-        for i in range(len(dataset)):
-            _, gtif = dataset[i]
-            img = tiff_to_jpg(gtif, AW3D30Dataset._GTIF_min, AW3D30Dataset._GTIF_max)
-            
-            min_value = img.min()
-            max_value = img.max()
-            print(i, min_value, max_value)
-            
-            if (max_value - min_value) > 25 and min_value >= 20:
-                break
-            
-        # Convert the gtif to an image
-        img = Image.fromarray(img)
-        img = img.convert("L")
-        img.save("gtif.jpg")
-        
-        
-        
+        tiff_to_jpg(gtif, out_path="gtif.jpg", convert=True)
     else:
         dataset = AW3D30Dataset(args.dataset, "cpu", normalize=False)
 

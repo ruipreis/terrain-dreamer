@@ -114,11 +114,11 @@ def train(
                 Image.fromarray(original_sat.permute(1,2,0).numpy().astype("uint8")).save(f"original_sat_{epoch}_{i}.jpg")
                 
                 tiff_to_jpg(
-                    original_dem,out_path=f"original_dem_{epoch}_{i}.jpg",min_value=AW3D30Dataset._GTIF_min,max_value=AW3D30Dataset._GTIF_max,convert=True
+                    original_dem,out_path=f"original_dem_{epoch}_{i}.jpg",convert=True
                 )
                 
                 tiff_to_jpg(
-                    predicted_dem,out_path=f"generated_dem_{epoch}_{i}.jpg",min_value=AW3D30Dataset._GTIF_min,max_value=AW3D30Dataset._GTIF_max,convert=True
+                    predicted_dem,out_path=f"generated_dem_{epoch}_{i}.jpg",convert=True
                 )
 
     
