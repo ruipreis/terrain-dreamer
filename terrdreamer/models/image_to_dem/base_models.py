@@ -61,7 +61,7 @@ class _OutputConvolution(nn.Module):
         return self.conv(x)
 
 
-class DEMValidator(nn.Module):
+class BasicDiscriminator(nn.Module):
     def __init__(self, dest_channels: int = 512):
         super().__init__()
 
@@ -91,7 +91,10 @@ class DEMValidator(nn.Module):
 
     def forward(self, x):
         for layer in self._layers:
-            x = layer(x)
+            if isinstance(layer, _DownSample):
+                _,x = layer(x)
+            else:
+                x = layer(x)
 
         # Average the output
         x = torch.mean(x, dim=(2, 3))
@@ -99,7 +102,7 @@ class DEMValidator(nn.Module):
         return x
 
 
-class UNetModel(nn.Module):
+class UNetGenerator(nn.Module):
     # Recieves an input shaped (B, 3, 256, 256)
     def __init__(self):
         super().__init__()
@@ -142,3 +145,9 @@ class UNetModel(nn.Module):
         outputs = self.outputs(d4)
 
         return outputs
+
+
+if __name__ == "__main__":
+    disc = BasicDiscriminator()
+    tensor = torch.randn(8, 1,256, 256)
+    print(disc(tensor).shape)

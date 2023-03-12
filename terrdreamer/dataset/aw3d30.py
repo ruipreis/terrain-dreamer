@@ -1,4 +1,3 @@
-import multiprocessing
 import re
 import zipfile
 from pathlib import Path
@@ -6,6 +5,33 @@ from typing import List
 
 from tqdm.contrib.concurrent import process_map
 
+import os
+from multiprocessing import Pool
+
+import requests
+
+
+def download_file(sample, folder):
+    base_name = sample.split("/")[-1]
+    print(f"Downloading {base_name}...")
+
+    req_sample = requests.get(sample)
+
+    # If the file is not found or response is HTML, skip
+    if (
+        req_sample.status_code == 404
+        or req_sample.headers["Content-Type"] == "text/html"
+    ):
+        print(f"File {base_name} not found. Skipping...")
+        return
+
+    with open(os.path.join(folder, base_name), "wb") as f:
+        f.write(req_sample.content)
+
+
+def download(ls, folder):
+    with Pool() as p:
+        p.starmap(download_file, [(sample, folder) for sample in ls])
 
 def _derive_subtiles(src_direction: str, dest_direction: str, degree_step: int):
     src_orientation = src_direction[0]
@@ -182,12 +208,20 @@ def extract(path: Path, outpath: Path):
 
 if __name__ == "__main__":
     import argparse
+    import time
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--extract", action="store_true")
+    parser.add_argument("--download", action="store_true")
     parser.add_argument("--path", type=Path, required=True)
     parser.add_argument("--outpath", type=Path, required=True)
     args = parser.parse_args()
 
     if args.extract:
         extract(args.path, args.outpath)
+    elif args.download:
+        ls = acquire()
+        start = time.time()
+        download(ls, "AW3D30_DATASET")
+        end = time.time()
+        print(f"Time taken: {end - start} seconds")
