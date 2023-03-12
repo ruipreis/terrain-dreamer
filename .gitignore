@@ -137,3 +137,7 @@ credentials
 *.png
 *.out
 *.npz
+*.zip
+dataset_aw3d30
+*.pt
+*.jpg
