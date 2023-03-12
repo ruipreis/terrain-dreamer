@@ -136,3 +136,4 @@ credentials
 *.tif
 *.png
 *.out
+*.npz
