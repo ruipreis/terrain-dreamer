@@ -96,8 +96,8 @@ class BasicDiscriminator(nn.Module):
             else:
                 x = layer(x)
 
-        # Average the output
-        x = torch.mean(x, dim=(2, 3))
+        # # Average the output
+        # x = torch.mean(x, dim=(2, 3))
 
         return x
 
@@ -124,6 +124,9 @@ class UNetGenerator(nn.Module):
 
         """ Classifier """
         self.outputs = nn.Conv2d(64, 1, kernel_size=1, padding=0)
+        
+        # Apply sigmoid to the output
+        self.tanh = nn.Tanh()
 
     def forward(self, inputs):
         """Encoder"""
@@ -144,7 +147,7 @@ class UNetGenerator(nn.Module):
         """ Classifier """
         outputs = self.outputs(d4)
 
-        return outputs
+        return self.tanh(outputs)
 
 
 if __name__ == "__main__":
