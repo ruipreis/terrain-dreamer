@@ -5,11 +5,9 @@ import torch.nn as nn
 from progan import Generator, Discriminator
 
 # Load the dataset
-from dataset import AW3D30Dataset, tiff_to_jpg
+from terrdreamer.dataset import AW3D30Dataset, tiff_to_jpg
 from pathlib import Path
 from tqdm import tqdm
-from PIL import Image
-import torchvision.transforms as transforms
 
 # Load configs & utils
 import progan_config
@@ -38,9 +36,10 @@ def trainer(
 
     for i, (real, _) in tqdm(enumerate(aw3d30_loader), total=len(aw3d30_loader)):
 
-        real = transforms.Resize((curr_image_size, curr_image_size))(real)
-
         real = real.to(progan_config.DEVICE)
+
+        # images = real[0].to(progan_config.DEVICE)
+        # real = torch.randn(images.shape[0], progan_config.LATENT_SIZE).to(progan_config.DEVICE)
 
         # Train Discriminator: max E[discriminator(real)] - E[discriminator(fake)] <-> min -E[discriminator(real)] + E[discriminator(fake)]
         # which is equivalent to minimizing the negative of the expression
@@ -78,7 +77,7 @@ def trainer(
 
         # Update alpha and ensure less than 1
         alpha += progan_config.BATCH_SIZE / (
-            (progan_config.PROGRESSIVE_EPOCHS[step] * 0.5) * len(aw3d30_loader)
+            (progan_config.PROGRESSIVE_EPOCHS[step] * 0.5) * len(aw3d30_loader) * 50
         )
         alpha = min(alpha, 1)
 
@@ -101,12 +100,6 @@ def trainer(
 
 
 def main():
-    # Load the dataset
-    aw3d30_loader = torch.utils.data.DataLoader(
-        AW3D30Dataset(progan_config.DATASET, progan_config.DEVICE, limit=10000),
-        progan_config.BATCH_SIZE,
-        shuffle=True,
-    )
 
     # Load the models to train on
     generator = Generator(
@@ -140,6 +133,19 @@ def main():
         alpha = 1e-5
         curr_image_size = 4 * 2**step
         print(f"Current image size: {curr_image_size}")
+
+        # Load the dataset
+        aw3d30_loader = torch.utils.data.DataLoader(
+            AW3D30Dataset(
+                progan_config.DATASET,
+                progan_config.DEVICE,
+                limit=10000,
+                for_progan=True,
+                new_size=curr_image_size,
+            ),
+            progan_config.BATCH_SIZE,
+            shuffle=True,
+        )
 
         for epoch in range(num_epochs):
             print(f"Epoch [{epoch+1}/{num_epochs}]")

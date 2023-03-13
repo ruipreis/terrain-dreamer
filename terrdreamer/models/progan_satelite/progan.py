@@ -33,12 +33,13 @@ class PixelNorm(nn.Module):
     def forward(self, x):
         return x / torch.sqrt(torch.mean(x**2, dim=1, keepdim=True) + self.epsilon)
 
+
 # Regular Convolution Block with Pixel Normalization
 # 2 Convolution Layers (3 x 3) with LeakyReLU activation
 # Only the Generator uses pixel normalization "use_pixelnorm"
 class ConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, use_pixelnorm=True):
-        super().__init__()
+        super(ConvBlock, self).__init__()
         self.use_pixelnorm = use_pixelnorm
         self.conv1 = WSConv2d(in_channels, out_channels)
         self.conv2 = WSConv2d(out_channels, out_channels)
@@ -55,7 +56,7 @@ class ConvBlock(nn.Module):
 
 class Generator(nn.Module):
     def __init__(self, latent_size, in_channels, img_channels=3):
-        super().__init__()
+        super(Generator, self).__init__()
 
         # 4x4
         self.conv_block1 = nn.Sequential(
@@ -108,7 +109,7 @@ class Generator(nn.Module):
 
 class Discriminator(nn.Module):
     def __init__(self, in_channels, img_channels=3):
-        super().__init__()
+        super(Discriminator, self).__init__()
 
         self.conv_blocks = nn.ModuleList([])
         self.rgb_layers = nn.ModuleList([])
@@ -132,10 +133,10 @@ class Discriminator(nn.Module):
         )
         self.rgb_layers.append(self.to_rgb1)
         # downsampling
-        self.avg_pool = nn.AvgPool2d(kernel_size=2, stride=2)
+        self.avg_pool = nn.AvgPool2d(kernel_size=2, stride=2, padding=0)
 
         self.conv_block1 = nn.Sequential(
-            WSConv2d(in_channels + 1, in_channels, kernel_size=3, padding=1),
+            WSConv2d(in_channels + 1, in_channels, kernel_size=3, stride=1, padding=1),
             nn.LeakyReLU(0.2),
             WSConv2d(in_channels, in_channels, kernel_size=4, stride=1, padding=0),
             nn.LeakyReLU(0.2),
