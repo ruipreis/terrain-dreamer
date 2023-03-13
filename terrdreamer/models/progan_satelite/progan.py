@@ -39,11 +39,11 @@ class PixelNorm(nn.Module):
 class ConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, use_pixelnorm=True):
         super().__init__()
+        self.use_pixelnorm = use_pixelnorm
         self.conv1 = WSConv2d(in_channels, out_channels)
         self.conv2 = WSConv2d(out_channels, out_channels)
         self.leaky = nn.LeakyReLU(0.2)
         self.pixelnorm = PixelNorm()
-        self.use_pixelnorm = use_pixelnorm
 
     def forward(self, x):
         x = self.leaky(self.conv1(x))
@@ -72,7 +72,7 @@ class Generator(nn.Module):
             in_channels, img_channels, kernel_size=1, stride=1, padding=0
         )
 
-        self.conv_blocks = nn.ModuleList()
+        self.conv_blocks = nn.ModuleList([])
         self.rgb_layers = nn.ModuleList([self.to_rgb1])
 
         # 8x8 -> 16x16 -> 32x32 -> 64x64 -> 128x128 -> 256x256
@@ -96,10 +96,10 @@ class Generator(nn.Module):
 
         for step in range(steps):
             # upsample
-            upscaled = F.interpolate(out, scale_factor=2, mode="nearest")
-            out = self.conv_blocks[step](upscaled)
+            up = F.interpolate(out, scale_factor=2, mode="nearest")
+            out = self.conv_blocks[step](up)
 
-        up_route = self.rgb_layers[steps - 1](upscaled)
+        up_route = self.rgb_layers[steps - 1](up)
         out_route = self.rgb_layers[steps](out)
 
         # apply fade in layers
@@ -110,8 +110,8 @@ class Discriminator(nn.Module):
     def __init__(self, in_channels, img_channels=3):
         super().__init__()
 
-        self.conv_blocks = nn.ModuleList()
-        self.rgb_layers = nn.ModuleList()
+        self.conv_blocks = nn.ModuleList([])
+        self.rgb_layers = nn.ModuleList([])
         self.leaky = nn.LeakyReLU(0.2)
 
         # 256x256 -> 128x128 -> 64x64 -> 32x32 -> 16x16 -> 8x8
@@ -132,10 +132,10 @@ class Discriminator(nn.Module):
         )
         self.rgb_layers.append(self.to_rgb1)
         # downsampling
-        self.avg_pool = nn.AvgPool2d(kernel_size=2, stride=2, padding=0)
+        self.avg_pool = nn.AvgPool2d(kernel_size=2, stride=2)
 
         self.conv_block1 = nn.Sequential(
-            WSConv2d(in_channels + 1, in_channels, kernel_size=3, stride=1, padding=1),
+            WSConv2d(in_channels + 1, in_channels, kernel_size=3, padding=1),
             nn.LeakyReLU(0.2),
             WSConv2d(in_channels, in_channels, kernel_size=4, stride=1, padding=0),
             nn.LeakyReLU(0.2),
