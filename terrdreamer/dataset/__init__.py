@@ -3,19 +3,20 @@ from torch.utils.data import Dataset
 import numpy as np
 from pathlib import Path
 import random
+from tqdm import tqdm
+
+
+DEM_MIN_ELEVATION = -283
+DEM_MAX_ELEVATION = 7943
 
 class AW3D30Dataset(Dataset):
-    _Satellite_mean= 69.27174377441406
-    _Satellite_std= 28.41813850402832
-
-    def __init__(self,path:Path, device, normalize=True, limit=None):
+    def __init__(self,path:Path, device, limit=None):
         self._available_files = list(path.glob("*.npz"))
         
         if limit is not None:
             self._available_files = random.sample(self._available_files, limit)
         
         self._device = device
-        self._normalize = normalize
 
     def __len__(self):
         return len(self._available_files)
@@ -30,25 +31,15 @@ class AW3D30Dataset(Dataset):
         gtif = gtif.unsqueeze(0)
         sat = sat.permute(2, 0, 1)
 
-        gtif  = gtif.to(self._device)
-        sat = sat.to(self._device)
-
-        if self._normalize:
-            # Normalize the data
-            sat = (sat - self._Satellite_mean) / self._Satellite_std
-            
-            # Apply min max normalization to the dem image
-            min_gtif_value = gtif.min()
-            max_gtif_value = gtif.max()
-
-            gtif = (gtif - min_gtif_value) / (max_gtif_value - min_gtif_value)
-            
-            # Now convert to the range of -1 to 1
-            gtif = gtif * 2 - 1
-
-            # Fill nans with -1
-            gtif[torch.isnan(gtif)] = -1
-                        
+        # Images also need to be normalized to be between -1 and 1
+        sat = (sat /127.5) - 1
+        
+        # Also normalize the gtif
+        gtif = (gtif - DEM_MIN_ELEVATION) / (DEM_MAX_ELEVATION - DEM_MIN_ELEVATION)
+        
+        # Now we need to make sure that the gtif is between -1 and 1
+        gtif = (gtif * 2) - 1
+        
         return sat, gtif
     
 from PIL import Image
@@ -56,6 +47,15 @@ from PIL import Image
 def tiff_to_jpg(tiff_data, convert:bool=False,out_path=None):
     # Unnormalize the gtif
     tiff_data = (tiff_data + 1) / 2
+    
+    tiff_data = (tiff_data * (DEM_MAX_ELEVATION - DEM_MIN_ELEVATION)) + DEM_MIN_ELEVATION
+    
+    
+    # Normalize the tiff data based on it's min and max, this helps with visualization
+    min_value = tiff_data.min()
+    max_value = tiff_data.max()
+    tiff_data = (tiff_data - min_value) / (max_value - min_value)
+    
     img = tiff_data.squeeze().numpy()
     
     # Scale the image
@@ -78,6 +78,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=Path, required=True)
     parser.add_argument("--sample-dem", action="store_true")
+    parser.add_argument("--check-sea", action="store_true")
     args = parser.parse_args()
 
     if args.sample_dem:
@@ -92,6 +93,21 @@ if __name__ == "__main__":
         
         # Find the first image whose amplitude is greater than 100
         tiff_to_jpg(gtif, out_path="gtif.jpg", convert=True)
+    elif args.check_sea:
+        # Check if the dataset has any sea images
+        dataset = AW3D30Dataset(args.dataset, "cpu", normalize=False)
+        sea_count = 0
+
+        for sat, gtif in tqdm(dataset, total=len(dataset)):
+            np_gtif = gtif.cpu().numpy()
+
+            # Is considered sea if 50% of the depth is below or equal to 0
+            is_sea = ((np_gtif <= 0).sum() / np_gtif.size) > 0.5
+
+            if is_sea:
+                sea_count += 1
+
+        print(f"Sea count: {sea_count}, Total: {len(dataset)}, Percentage: {sea_count / len(dataset) * 100}%")
     else:
         dataset = AW3D30Dataset(args.dataset, "cpu", normalize=False)
 

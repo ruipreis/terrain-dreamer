@@ -2,155 +2,128 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+def normal_init(m, mean, std):
+    if isinstance(m, nn.ConvTranspose2d) or isinstance(m, nn.Conv2d):
+        m.weight.data.normal_(mean, std)
+        # m.bias.data.zero_()
 
-class _DoubleConvolution(nn.Module):
-    def __init__(self, in_channels, out_channels, mid_channels=None):
+
+
+class UNetGenerator(nn.Module):
+    # Just like the original paper
+    def __init__(self, in_channels:int, out_channels:int, d: int = 64):
+        # The number of channels is expected to be the sum of the number of channels of the input and the target
         super().__init__()
+                # Unet encoder
+        self.conv1 = nn.Conv2d(in_channels, d, 4, 2, 1)
+        self.conv2 = nn.Conv2d(d, d * 2, 4, 2, 1)
+        self.conv2_bn = nn.BatchNorm2d(d * 2)
+        self.conv3 = nn.Conv2d(d * 2, d * 4, 4, 2, 1)
+        self.conv3_bn = nn.BatchNorm2d(d * 4)
+        self.conv4 = nn.Conv2d(d * 4, d * 8, 4, 2, 1)
+        self.conv4_bn = nn.BatchNorm2d(d * 8)
+        self.conv5 = nn.Conv2d(d * 8, d * 8, 4, 2, 1)
+        self.conv5_bn = nn.BatchNorm2d(d * 8)
+        self.conv6 = nn.Conv2d(d * 8, d * 8, 4, 2, 1)
+        self.conv6_bn = nn.BatchNorm2d(d * 8)
+        self.conv7 = nn.Conv2d(d * 8, d * 8, 4, 2, 1)
+        self.conv7_bn = nn.BatchNorm2d(d * 8)
+        self.conv8 = nn.Conv2d(d * 8, d * 8, 4, 2, 1)
+        # self.conv8_bn = nn.BatchNorm2d(d * 8)
 
-        if not mid_channels:
-            mid_channels = out_channels
+        # Unet decoder
+        self.deconv1 = nn.ConvTranspose2d(d * 8, d * 8, 4, 2, 1)
+        self.deconv1_bn = nn.BatchNorm2d(d * 8)
+        self.deconv2 = nn.ConvTranspose2d(d * 8 * 2, d * 8, 4, 2, 1)
+        self.deconv2_bn = nn.BatchNorm2d(d * 8)
+        self.deconv3 = nn.ConvTranspose2d(d * 8 * 2, d * 8, 4, 2, 1)
+        self.deconv3_bn = nn.BatchNorm2d(d * 8)
+        self.deconv4 = nn.ConvTranspose2d(d * 8 * 2, d * 8, 4, 2, 1)
+        self.deconv4_bn = nn.BatchNorm2d(d * 8)
+        self.deconv5 = nn.ConvTranspose2d(d * 8 * 2, d * 4, 4, 2, 1)
+        self.deconv5_bn = nn.BatchNorm2d(d * 4)
+        self.deconv6 = nn.ConvTranspose2d(d * 4 * 2, d * 2, 4, 2, 1)
+        self.deconv6_bn = nn.BatchNorm2d(d * 2)
+        self.deconv7 = nn.ConvTranspose2d(d * 2 * 2, d, 4, 2, 1)
+        self.deconv7_bn = nn.BatchNorm2d(d)
+        self.deconv8 = nn.ConvTranspose2d(d * 2, out_channels, 4, 2, 1)
+        
+    def weight_init(self, mean, std):
+        for m in self._modules:
+            normal_init(self._modules[m], mean, std)
+            # Zero the bias
+            self._modules[m].bias.data.zero_()
+        
+    def forward(self, input):
+        e1 = self.conv1(input)
+        e2 = self.conv2_bn(self.conv2(F.leaky_relu(e1, 0.2)))
+        e3 = self.conv3_bn(self.conv3(F.leaky_relu(e2, 0.2)))
+        e4 = self.conv4_bn(self.conv4(F.leaky_relu(e3, 0.2)))
+        e5 = self.conv5_bn(self.conv5(F.leaky_relu(e4, 0.2)))
+        e6 = self.conv6_bn(self.conv6(F.leaky_relu(e5, 0.2)))
+        e7 = self.conv7_bn(self.conv7(F.leaky_relu(e6, 0.2)))
+        e8 = self.conv8(F.leaky_relu(e7, 0.2))
+        # e8 = self.conv8_bn(self.conv8(F.leaky_relu(e7, 0.2)))
+        d1 = F.dropout(self.deconv1_bn(self.deconv1(F.relu(e8))), 0.5, training=True)
+        d1 = torch.cat([d1, e7], 1)
+        d2 = F.dropout(self.deconv2_bn(self.deconv2(F.relu(d1))), 0.5, training=True)
+        d2 = torch.cat([d2, e6], 1)
+        d3 = F.dropout(self.deconv3_bn(self.deconv3(F.relu(d2))), 0.5, training=True)
+        d3 = torch.cat([d3, e5], 1)
+        d4 = self.deconv4_bn(self.deconv4(F.relu(d3)))
+        # d4 = F.dropout(self.deconv4_bn(self.deconv4(F.relu(d3))), 0.5)
+        d4 = torch.cat([d4, e4], 1)
+        d5 = self.deconv5_bn(self.deconv5(F.relu(d4)))
+        d5 = torch.cat([d5, e3], 1)
+        d6 = self.deconv6_bn(self.deconv6(F.relu(d5)))
+        d6 = torch.cat([d6, e2], 1)
+        d7 = self.deconv7_bn(self.deconv7(F.relu(d6)))
+        d7 = torch.cat([d7, e1], 1)
+        d8 = self.deconv8(F.relu(d7))
+        o = torch.tanh(d8)
 
-        self.double_conv = nn.Sequential(
-            nn.Conv2d(in_channels, mid_channels, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(mid_channels),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(mid_channels, out_channels, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True),
-        )
-
-    def forward(self, x):
-        return self.double_conv(x)
-
-
-class _DownSample(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        super().__init__()
-        self._conv = _DoubleConvolution(in_channels, out_channels)
-        self._pool = nn.MaxPool2d(2)
-
-    def forward(self, x):
-        x = self._conv(x)
-        p = self._pool(x)
-        return x, p
-
-
-class _UpSample(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        super().__init__()
-
-        # The number of channels needs to be halved in order to cat the skip
-        # connection
-        self._up = nn.ConvTranspose2d(
-            in_channels, in_channels // 2, kernel_size=2, stride=2
-        )
-        self._conv = _DoubleConvolution(in_channels, out_channels)
-
-    def forward(self, x1, x2):
-        x1 = self._up(x1)
-        x = torch.cat([x2, x1], dim=1)
-        return self._conv(x)
-
-
-class _OutputConvolution(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        super().__init__()
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=1)
-
-    def forward(self, x):
-        return self.conv(x)
+        return o
 
 
 class BasicDiscriminator(nn.Module):
-    def __init__(self, dest_channels: int = 512):
+    # initializers
+    def __init__(self, input_channels,d=64):
         super().__init__()
+        self.conv1 = nn.Conv2d(input_channels, d, 4, 2, 1)
+        self.conv2 = nn.Conv2d(d, d * 2, 4, 2, 1)
+        self.conv2_bn = nn.BatchNorm2d(d * 2)
+        self.conv3 = nn.Conv2d(d * 2, d * 4, 4, 2, 1)
+        self.conv3_bn = nn.BatchNorm2d(d * 4)
+        self.conv4 = nn.Conv2d(d * 4, d * 8, 4, 1, 1)
+        self.conv4_bn = nn.BatchNorm2d(d * 8)
+        self.conv5 = nn.Conv2d(d * 8, 1, 4, 1, 1)
 
-        src_base_channels = 64
-        src_base_log2 = int(torch.log2(torch.tensor(src_base_channels)))
-        dst_log2 = int(torch.log2(torch.tensor(dest_channels)))
+    # weight_init
+    def weight_init(self, mean, std):
+        for m in self._modules:
+            normal_init(self._modules[m], mean, std)
+            self._modules[m].bias.data.zero_()
 
-        # This models increases the number of channels from 1 to 512,
-        # the number of channels in doubled in each block, starting from 64
-        # depending on the number of destination channels.
-        layers = [_DoubleConvolution(1, src_base_channels)]
-
-        for i in range(src_base_log2, dst_log2):
-            in_channels = 2**i
-            out_channels = 2 ** (i + 1)
-
-            layers.append(_DownSample(in_channels, out_channels))
-
-        # Add the final layer that applies a convolution with a kernel size of 1
-        # to reduce the number of channels to 1
-        layers.append(_OutputConvolution(dest_channels, 1))
-
-        layers.append(nn.Sigmoid())
-
-        self._sequence = nn.Sequential(*layers)
-        self._layers = layers
-
-    def forward(self, x):
-        for layer in self._layers:
-            if isinstance(layer, _DownSample):
-                _,x = layer(x)
-            else:
-                x = layer(x)
-
-        # # Average the output
-        # x = torch.mean(x, dim=(2, 3))
+    # forward method
+    def forward(self, input, label):
+        x = torch.cat([input, label], 1)
+        x = F.leaky_relu(self.conv1(x), 0.2)
+        x = F.leaky_relu(self.conv2_bn(self.conv2(x)), 0.2)
+        x = F.leaky_relu(self.conv3_bn(self.conv3(x)), 0.2)
+        x = F.leaky_relu(self.conv4_bn(self.conv4(x)), 0.2)
+        x = torch.sigmoid(self.conv5(x))
 
         return x
 
 
-class UNetGenerator(nn.Module):
-    # Recieves an input shaped (B, 3, 256, 256)
-    def __init__(self):
-        super().__init__()
-
-        """ Encoder """
-        self.e1 = _DownSample(3, 64)
-        self.e2 = _DownSample(64, 128)
-        self.e3 = _DownSample(128, 256)
-        self.e4 = _DownSample(256, 512)
-
-        """ Bottleneck """
-        self.b = _DoubleConvolution(512, 1024)
-
-        """ Decoder """
-        self.d1 = _UpSample(1024, 512)
-        self.d2 = _UpSample(512, 256)
-        self.d3 = _UpSample(256, 128)
-        self.d4 = _UpSample(128, 64)
-
-        """ Classifier """
-        self.outputs = nn.Conv2d(64, 1, kernel_size=1, padding=0)
-        
-        # Apply sigmoid to the output
-        self.tanh = nn.Tanh()
-
-    def forward(self, inputs):
-        """Encoder"""
-        s1, p1 = self.e1(inputs)
-        s2, p2 = self.e2(p1)
-        s3, p3 = self.e3(p2)
-        s4, p4 = self.e4(p3)
-
-        """ Bottleneck """
-        b = self.b(p4)
-
-        """ Decoder """
-        d1 = self.d1(b, s4)
-        d2 = self.d2(d1, s3)
-        d3 = self.d3(d2, s2)
-        d4 = self.d4(d3, s1)
-
-        """ Classifier """
-        outputs = self.outputs(d4)
-
-        return self.tanh(outputs)
-
-
 if __name__ == "__main__":
-    disc = BasicDiscriminator()
-    tensor = torch.randn(8, 1,256, 256)
-    print(disc(tensor).shape)
+    input_rgb = torch.randn(8, 3, 256, 256)
+    target_dem = torch.randn(8, 1, 256, 256)
+    
+    disc = BasicDiscriminator(3+1)
+    print("Experimenting with the discriminator...")
+    print(disc(input_rgb, target_dem).shape)
+    
+    generator = UNetGenerator(3)
+    print("Experimenting with the generator...")
+    print(generator(input_rgb).shape)
