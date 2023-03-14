@@ -5,9 +5,20 @@ import torch.nn.functional as F
 def normal_init(m, mean, std):
     if isinstance(m, nn.ConvTranspose2d) or isinstance(m, nn.Conv2d):
         m.weight.data.normal_(mean, std)
-        # m.bias.data.zero_()
+        m.bias.data.zero_()
 
 
+class CustomUpsample(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super(CustomUpsample, self).__init__()
+        self._upsample = nn.Upsample(scale_factor=4, mode='bilinear')
+        self._conv = nn.Conv2d(in_channels, out_channels, 4,2,1)
+    
+    def forward(self, x):
+        x = self._upsample(x)
+        x = self._conv(x)
+        return x
+        
 
 class UNetGenerator(nn.Module):
     # Just like the original paper
@@ -32,27 +43,41 @@ class UNetGenerator(nn.Module):
         # self.conv8_bn = nn.BatchNorm2d(d * 8)
 
         # Unet decoder
-        self.deconv1 = nn.ConvTranspose2d(d * 8, d * 8, 4, 2, 1)
+        self.deconv1 = CustomUpsample(d * 8, d * 8)
         self.deconv1_bn = nn.BatchNorm2d(d * 8)
-        self.deconv2 = nn.ConvTranspose2d(d * 8 * 2, d * 8, 4, 2, 1)
+        self.deconv2 = CustomUpsample(d * 8 * 2, d * 8)
         self.deconv2_bn = nn.BatchNorm2d(d * 8)
-        self.deconv3 = nn.ConvTranspose2d(d * 8 * 2, d * 8, 4, 2, 1)
+        self.deconv3 = CustomUpsample(d * 8 * 2, d * 8)
         self.deconv3_bn = nn.BatchNorm2d(d * 8)
-        self.deconv4 = nn.ConvTranspose2d(d * 8 * 2, d * 8, 4, 2, 1)
+        self.deconv4 = CustomUpsample(d * 8 * 2, d * 8)
         self.deconv4_bn = nn.BatchNorm2d(d * 8)
-        self.deconv5 = nn.ConvTranspose2d(d * 8 * 2, d * 4, 4, 2, 1)
+        self.deconv5 = CustomUpsample(d * 8 * 2, d * 4)
         self.deconv5_bn = nn.BatchNorm2d(d * 4)
-        self.deconv6 = nn.ConvTranspose2d(d * 4 * 2, d * 2, 4, 2, 1)
+        self.deconv6 = CustomUpsample(d * 4 * 2, d * 2)
         self.deconv6_bn = nn.BatchNorm2d(d * 2)
-        self.deconv7 = nn.ConvTranspose2d(d * 2 * 2, d, 4, 2, 1)
+        self.deconv7 = CustomUpsample(d * 2 * 2, d)
         self.deconv7_bn = nn.BatchNorm2d(d)
-        self.deconv8 = nn.ConvTranspose2d(d * 2, out_channels, 4, 2, 1)
+        self.deconv8 = CustomUpsample(d * 2, out_channels)
+
+        # self.deconv1 = nn.ConvTranspose2d(d * 8, d * 8,4,2,1)
+        # self.deconv1_bn = nn.BatchNorm2d(d * 8)
+        # self.deconv2 = nn.ConvTranspose2d(d * 8 * 2, d * 8,4,2,1)
+        # self.deconv2_bn = nn.BatchNorm2d(d * 8)
+        # self.deconv3 = nn.ConvTranspose2d(d * 8 * 2, d * 8,4,2,1)
+        # self.deconv3_bn = nn.BatchNorm2d(d * 8)
+        # self.deconv4 = nn.ConvTranspose2d(d * 8 * 2, d * 8,4,2,1)
+        # self.deconv4_bn = nn.BatchNorm2d(d * 8)
+        # self.deconv5 = nn.ConvTranspose2d(d * 8 * 2, d * 4,4,2,1)
+        # self.deconv5_bn = nn.BatchNorm2d(d * 4)
+        # self.deconv6 = nn.ConvTranspose2d(d * 4 * 2, d * 2,4,2,1)
+        # self.deconv6_bn = nn.BatchNorm2d(d * 2)
+        # self.deconv7 = nn.ConvTranspose2d(d * 2 * 2, d,4,2,1)
+        # self.deconv7_bn = nn.BatchNorm2d(d)
+        # self.deconv8 = nn.ConvTranspose2d(d * 2, out_channels,4,2,1)
         
     def weight_init(self, mean, std):
         for m in self._modules:
             normal_init(self._modules[m], mean, std)
-            # Zero the bias
-            self._modules[m].bias.data.zero_()
         
     def forward(self, input):
         e1 = self.conv1(input)

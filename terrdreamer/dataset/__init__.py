@@ -4,19 +4,23 @@ import numpy as np
 from pathlib import Path
 import random
 from tqdm import tqdm
-
+import torch.nn as nn
 
 DEM_MIN_ELEVATION = -283
 DEM_MAX_ELEVATION = 7943
+DEM_ELEVATION_MEAN = 780.5281
+DEM_ELEVATION_STD = 954.7249
+RGB_MEAN = torch.tensor([73.515, 68.865375, 52.41], dtype=torch.float32).unsqueeze(1).unsqueeze(1)
+RGB_STD = torch.tensor([51.915, 48.070525, 55.84], dtype=torch.float32).unsqueeze(1).unsqueeze(1)
 
 class AW3D30Dataset(Dataset):
-    def __init__(self,path:Path, device, limit=None):
+    def __init__(self,path:Path, limit=None, normalize:bool=True):
         self._available_files = list(path.glob("*.npz"))
         
         if limit is not None:
             self._available_files = random.sample(self._available_files, limit)
         
-        self._device = device
+        self._normalize = normalize
 
     def __len__(self):
         return len(self._available_files)
@@ -31,15 +35,13 @@ class AW3D30Dataset(Dataset):
         gtif = gtif.unsqueeze(0)
         sat = sat.permute(2, 0, 1)
 
-        # Images also need to be normalized to be between -1 and 1
-        sat = (sat /127.5) - 1
-        
-        # Also normalize the gtif
-        gtif = (gtif - DEM_MIN_ELEVATION) / (DEM_MAX_ELEVATION - DEM_MIN_ELEVATION)
-        
-        # Now we need to make sure that the gtif is between -1 and 1
-        gtif = (gtif * 2) - 1
-        
+        if self._normalize:
+            # sat = (sat -RGB_MEAN) / RGB_STD
+            sat = (sat/127.5)-1
+            gtif = (gtif-DEM_MIN_ELEVATION) / (DEM_MAX_ELEVATION - DEM_MIN_ELEVATION)
+            gtif = gtif*2 - 1
+            # gtif = (gtif - DEM_ELEVATION_MEAN) / DEM_ELEVATION_STD
+
         return sat, gtif
     
 from PIL import Image
@@ -47,9 +49,7 @@ from PIL import Image
 def tiff_to_jpg(tiff_data, convert:bool=False,out_path=None):
     # Unnormalize the gtif
     tiff_data = (tiff_data + 1) / 2
-    
-    tiff_data = (tiff_data * (DEM_MAX_ELEVATION - DEM_MIN_ELEVATION)) + DEM_MIN_ELEVATION
-    
+    tiff_data = tiff_data * (DEM_MAX_ELEVATION - DEM_MIN_ELEVATION) + DEM_MIN_ELEVATION
     
     # Normalize the tiff data based on it's min and max, this helps with visualization
     min_value = tiff_data.min()
@@ -57,9 +57,6 @@ def tiff_to_jpg(tiff_data, convert:bool=False,out_path=None):
     tiff_data = (tiff_data - min_value) / (max_value - min_value)
     
     img = tiff_data.squeeze().numpy()
-    
-    # Scale the image
-    img = np.maximum(np.minimum(img, 1.0), 0.0)
     
     img = (img * 255).astype(np.uint8)
     
@@ -79,6 +76,8 @@ if __name__ == "__main__":
     parser.add_argument("--dataset", type=Path, required=True)
     parser.add_argument("--sample-dem", action="store_true")
     parser.add_argument("--check-sea", action="store_true")
+    parser.add_argument("--sample-size", type=int, default=10000)
+    parser.add_argument("--option", choices=["rgb","dem"])
     args = parser.parse_args()
 
     if args.sample_dem:
@@ -109,28 +108,19 @@ if __name__ == "__main__":
 
         print(f"Sea count: {sea_count}, Total: {len(dataset)}, Percentage: {sea_count / len(dataset) * 100}%")
     else:
-        dataset = AW3D30Dataset(args.dataset, "cpu", normalize=False)
+        dataset = AW3D30Dataset(args.dataset, normalize=False)
 
-        # Compute the mean and std of the dataset for both the satellite and the ground truth
-        sat_mean = 0
-        sat_std = 0
-        gtif_min = np.inf
-        gtif_max = -np.inf
+        # Grab some random indexes from the dataset
+        if args.option == "dem":
+            indexes = np.random.randint(0, len(dataset), args.sample_size)
+            gtif_tensor = torch.concatenate([dataset[i][1] for i in indexes], dim=0)
+            print("GTIF Tensor Shape:", gtif_tensor.shape)
+            print("GTIF Tensor Mean:", gtif_tensor.mean())
+            print("GTIF Tensor Std:", gtif_tensor.std())
+        elif args.option == "rgb":
+            indexes = np.random.randint(0, len(dataset), args.sample_size)
+            sat_tensor = torch.cat([dataset[i][0].unsqueeze(0) for i in indexes], dim=0)
+            print("SAT Tensor Shape:", sat_tensor.shape)
+            print("SAT Tensor Mean:", sat_tensor.mean(dim=(0, 2, 3)))
+            print("SAT Tensor Std:", sat_tensor.std(dim=(0, 2, 3)))
 
-        for sat, gtif in tqdm(dataset, total=len(dataset)):
-            sat_mean += sat.mean()
-            sat_std += sat.std()
-            
-            # For the gtif, we want to perform min-max normalization, so we need to compute the min and max
-            gtif_min = min(gtif_min, gtif.min())
-            gtif_max = max(gtif_max, gtif.max())
-            
-
-        sat_mean /= len(dataset)
-        sat_std /= len(dataset)
-
-        print(f"Satellite mean: {sat_mean}")
-        print(f"Satellite std: {sat_std}")
-        print(f"GTIF min: {gtif_min}")
-        print(f"GTIF max: {gtif_max}")
-    
