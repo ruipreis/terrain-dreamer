@@ -7,7 +7,7 @@ import torch.nn as nn
 from terrdreamer.models.image_to_dem.base_models import BasicDiscriminator, UNetGenerator
 
 # Load the dataset
-from terrdreamer.dataset import AW3D30Dataset, tiff_to_jpg, RGB_MEAN, RGB_STD
+from terrdreamer.dataset import AW3D30Dataset, tiff_to_jpg
 
 from pathlib import Path
 from tqdm import tqdm
@@ -24,8 +24,8 @@ def train(
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Load the dataset
-    train_dataset = AW3D30Dataset(dataset_path)
-    test_dataset = AW3D30Dataset(test_dataset_path)
+    train_dataset = AW3D30Dataset(dataset_path, limit=3000)
+    test_dataset = AW3D30Dataset(test_dataset_path, limit=300)
     
     aw3d30_loader = torch.utils.data.DataLoader(
         train_dataset, 
@@ -56,12 +56,12 @@ def train(
         D.weight_init(mean=0.0, std=0.02)    
     
     # Load the losses - we'll stick with the ones used in the paper
-    BCE_loss = nn.BCEWithLogitsLoss().cuda()
+    BCE_loss = nn.BCELoss().cuda()
     L1_loss = nn.L1Loss().cuda()
 
     # Load the optimizers - we'll stick with the ones used in the paper
-    G_optimizer = torch.optim.AdamW(G.parameters(), lr=lr, betas=(beta1, beta2), weight_decay=1e-6)
-    D_optimizer = torch.optim.AdamW(D.parameters(), lr=lr, betas=(beta1,beta2), weight_decay=1e-6)
+    G_optimizer = torch.optim.AdamW(G.parameters(), lr=lr, betas=(beta1, beta2))
+    D_optimizer = torch.optim.AdamW(D.parameters(), lr=lr, betas=(beta1,beta2))
     #GRADIENT CLIPPING
 
 
@@ -238,8 +238,8 @@ if __name__ == "__main__":
     parser.add_argument("--train-dataset", type=Path, required=True)
     parser.add_argument("--test-dataset", type=Path, required=True)
     parser.add_argument("--n-epochs", type=int, default=700)
-    parser.add_argument("--batch-size", type=int, default=4)
-    parser.add_argument("--lr", type=float, default=0.0002)
+    parser.add_argument("--batch-size", type=int, default=32)
+    parser.add_argument("--lr", type=float, default=0.001)
     parser.add_argument("--pretrained-generator", type=Path, default=None)
     parser.add_argument("--pretrained-discriminator", type=Path, default=None)
     args = parser.parse_args()

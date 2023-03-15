@@ -8,41 +8,6 @@ def normal_init(m, mean, std):
         torch.nn.init.constant_(m.bias, 0)
 
 
-class CustomUpsample(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        super(CustomUpsample, self).__init__()
-        self._upsample = nn.Upsample(scale_factor=4, mode='bilinear')
-        self._conv = nn.Conv2d(in_channels, out_channels, 4,2,1)
-    
-    def forward(self, x):
-        x = self._upsample(x)
-        x = self._conv(x)
-        return x
-        
-class Upsample(nn.Module):
-    __doc__ = r"""Upsamples a given tensor by a factor of 2. Uses resize convolution to avoid checkerboard artifacts.
-    Input:
-        x: tensor of shape (N, in_channels, H, W)
-        time_emb: ignored
-        y: ignored
-    Output:
-        tensor of shape (N, in_channels, H * 2, W * 2)
-    Args:
-        in_channels (int): number of input channels
-    """
-
-    def __init__(self, in_channels):
-        super().__init__()
-
-        self.upsample = nn.Sequential(
-            nn.Upsample(scale_factor=2, mode="nearest", align_corners=True),
-            nn.Conv2d(in_channels, in_channels, 3,padding="same"),
-        )
-    
-    def forward(self, x, time_emb, y):
-        return self.upsample(x)
-
-
 class UpSampleConv(nn.Module):
     def __init__(
         self,
@@ -194,7 +159,7 @@ class BasicDiscriminator(nn.Module):
         x2 = self.d3(x1)
         x3 = self.d4(x2)
         xn = self.final(x3)
-        return xn
+        return torch.sigmoid(xn)
     
     def weight_init(self, mean, std):
         for m in self._modules:
