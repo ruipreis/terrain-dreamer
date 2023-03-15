@@ -4,46 +4,7 @@ import numpy as np
 from pathlib import Path
 import random
 from tqdm import tqdm
-import torch.nn as nn
 
-DEM_MIN_ELEVATION = -82
-DEM_MAX_ELEVATION = 7219
-DEM_ELEVATION_MEAN = 780.5281
-DEM_ELEVATION_STD = 954.7249
-RGB_MEAN = torch.tensor([73.515, 68.865375, 52.41], dtype=torch.float32).unsqueeze(1).unsqueeze(1)
-RGB_STD = torch.tensor([51.915, 48.070525, 55.84], dtype=torch.float32).unsqueeze(1).unsqueeze(1)
-
-class AW3D30Dataset(Dataset):
-    def __init__(self,path:Path, limit=None, normalize:bool=True):
-        self._available_files = list(path.glob("*.npz"))
-        
-        if limit is not None:
-            self._available_files = random.sample(self._available_files, limit)
-        
-        self._normalize = normalize
-
-    def __len__(self):
-        return len(self._available_files)
-    
-    def __getitem__(self, idx):
-        data = np.load(self._available_files[idx])
-
-        gtif = torch.tensor(data["GTIF"], dtype=torch.float32)
-        sat = torch.tensor(data["SAT"], dtype=torch.float32)
-
-        # Make sure gtif and sat is shaped correctly
-        gtif = gtif.unsqueeze(0)
-        sat = sat.permute(2, 0, 1)
-
-        if self._normalize:
-            # sat = (sat -RGB_MEAN) / RGB_STD
-            sat = (sat/127.5)-1
-            gtif = (gtif-DEM_MIN_ELEVATION) / (DEM_MAX_ELEVATION - DEM_MIN_ELEVATION)
-            gtif = gtif*2 - 1
-            # gtif = (gtif - DEM_ELEVATION_MEAN) / DEM_ELEVATION_STD
-
-        return sat, gtif
-    
 from PIL import Image
 
 def tiff_to_jpg(tiff_data, convert:bool=False,out_path=None):
@@ -60,12 +21,59 @@ def tiff_to_jpg(tiff_data, convert:bool=False,out_path=None):
     
     img = (img * 255).astype(np.uint8)
     
+    img = Image.fromarray(img)
+    img = img.convert("L")
+    
     if convert:
-        img = Image.fromarray(img)
-        img = img.convert("L")
         img.save(out_path)
 
     return img
+
+DEM_MIN_ELEVATION = -82
+DEM_MAX_ELEVATION = 7219
+
+class AW3D30Dataset(Dataset):
+    def __init__(self,path:Path, limit=None, normalize:bool=True, swap:bool=False):
+        self._available_files = list(path.glob("*.npz"))
+        
+        if limit is not None:
+            self._available_files = random.sample(self._available_files, limit)
+        
+        self._normalize = normalize
+        self._swap = swap
+
+    def __len__(self):
+        return len(self._available_files)
+    
+    def __getitem__(self, idx):
+        data = np.load(self._available_files[idx])
+
+        gtif = torch.tensor(data["GTIF"], dtype=torch.float32)
+        sat = torch.tensor(data["SAT"], dtype=torch.float32)
+
+        # Make sure gtif and sat is shaped correctly
+        gtif = gtif.unsqueeze(0)
+
+        # @TODO: maybe change this to 2, 0, 1
+        sat = sat.permute(2, 0, 1)
+
+        if self._normalize:
+            sat = (sat/127.5)-1
+            gtif = (gtif-DEM_MIN_ELEVATION) / (DEM_MAX_ELEVATION - DEM_MIN_ELEVATION)
+            gtif = gtif*2 - 1
+
+        if self._swap:
+            return gtif, sat
+
+        return sat, gtif
+    
+    def to_img(self, sat_img):
+        unnormalized_sat = (sat_img + 1) *127.5
+        unnormalized_sat = unnormalized_sat.permute(1, 2, 0).numpy().astype(np.uint8)
+        return unnormalized_sat
+    
+    def to_gtif(self, dem):
+        return tiff_to_jpg(dem, convert=False)
 
 
 if __name__ == "__main__":

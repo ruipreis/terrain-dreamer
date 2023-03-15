@@ -141,3 +141,4 @@ credentials
 dataset_aw3d30
 *.pt
 *.jpg
+wandb

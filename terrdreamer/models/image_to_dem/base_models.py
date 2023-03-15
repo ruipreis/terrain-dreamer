@@ -4,8 +4,10 @@ import torch.nn.functional as F
 
 def normal_init(m, mean, std):
     if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
-        torch.nn.init.normal_(m.weight, 0.0, 0.02)
-        torch.nn.init.constant_(m.bias, 0)
+        torch.nn.init.normal_(m.weight.data, 0.0, 0.02)
+    elif isinstance(m, nn.BatchNorm2d):
+        torch.nn.init.normal_(m.weight.data, 1.0, 0.02)
+        torch.nn.init.constant_(m.bias.data, 0)
 
 
 class UpSampleConv(nn.Module):
@@ -82,7 +84,7 @@ class DownSampleConv(nn.Module):
         return x
     
 class UNetGenerator(nn.Module):
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, out_channels, d:int=64):
         """
         Paper details:
         - Encoder: C64-C128-C256-C512-C512-C512-C512-C512
@@ -94,28 +96,27 @@ class UNetGenerator(nn.Module):
 
         # encoder/donwsample convs
         self.encoders = [
-            DownSampleConv(in_channels, 64, batchnorm=False),  # bs x 64 x 128 x 128
-            DownSampleConv(64, 128),  # bs x 128 x 64 x 64
-            DownSampleConv(128, 256),  # bs x 256 x 32 x 32
-            DownSampleConv(256, 512),  # bs x 512 x 16 x 16
-            DownSampleConv(512, 512),  # bs x 512 x 8 x 8
-            DownSampleConv(512, 512),  # bs x 512 x 4 x 4
-            DownSampleConv(512, 512),  # bs x 512 x 2 x 2
-            DownSampleConv(512, 512, batchnorm=False),  # bs x 512 x 1 x 1
+            DownSampleConv(in_channels, d, batchnorm=False),  # bs x 64 x 128 x 128
+            DownSampleConv(d, d*2),  # bs x d*2 x 64 x 64
+            DownSampleConv(d*2, d*4),  # bs x d*4 x 32 x 32
+            DownSampleConv(d*4, d*8),  # bs x d*8 x 16 x 16
+            DownSampleConv(d*8, d*8),  # bs x d*8 x 8 x 8
+            DownSampleConv(d*8, d*8),  # bs x d*8 x 4 x 4
+            DownSampleConv(d*8, d*8),  # bs x d*8 x 2 x 2
+            DownSampleConv(d*8, d*8, batchnorm=False),  # bs x 512 x 1 x 1
         ]
 
         # decoder/upsample convs
         self.decoders = [
-            UpSampleConv(512, 512, dropout=True),  # bs x 512 x 2 x 2
-            UpSampleConv(1024, 512, dropout=True),  # bs x 512 x 4 x 4
-            UpSampleConv(1024, 512, dropout=True),  # bs x 512 x 8 x 8
-            UpSampleConv(1024, 512),  # bs x 512 x 16 x 16
-            UpSampleConv(1024, 256),  # bs x 256 x 32 x 32
-            UpSampleConv(512, 128),  # bs x 128 x 64 x 64
-            UpSampleConv(256, 64),  # bs x 64 x 128 x 128
+            UpSampleConv(d*8, d*8, dropout=True),  # bs x d*8 x 2 x 2
+            UpSampleConv(d*8*2, d*8, dropout=True),  # bs x d*8 x 4 x 4
+            UpSampleConv(d*8*2, d*8, dropout=True),  # bs x d*8 x 8 x 8
+            UpSampleConv(d*8*2, d*8),  # bs x d*8 x 16 x 16
+            UpSampleConv(d*8*2, d*4),  # bs x d*4 x 32 x 32
+            UpSampleConv(d*8, d*2),  # bs x 128 x 64 x 64
+            UpSampleConv(d*4, d),  # bs x 64 x 128 x 128
         ]
-        self.decoder_channels = [512, 512, 512, 512, 256, 128, 64]
-        self.final_conv = nn.ConvTranspose2d(64, out_channels, kernel_size=4, stride=2, padding=1)
+        self.final_conv = UpSampleConv(d, out_channels, activation=False, batchnorm=False)
         self.tanh = nn.Tanh()
 
         self.encoders = nn.ModuleList(self.encoders)
@@ -142,15 +143,19 @@ class UNetGenerator(nn.Module):
     def weight_init(self, mean, std):
         for m in self._modules:
             normal_init(self._modules[m], mean, std)
+
+    def set_requires_grad(self, requires_grad=False):
+        for param in self.parameters():
+            param.requires_grad = requires_grad
         
 class BasicDiscriminator(nn.Module):
-    def __init__(self, input_channels):
+    def __init__(self, input_channels, d:int=64):
         super().__init__()
-        self.d1 = DownSampleConv(input_channels, 64, batchnorm=False)
-        self.d2 = DownSampleConv(64, 128)
-        self.d3 = DownSampleConv(128, 256)
-        self.d4 = DownSampleConv(256, 512)
-        self.final = nn.Conv2d(512, 1, kernel_size=1)
+        self.d1 = DownSampleConv(input_channels, d, batchnorm=False)
+        self.d2 = DownSampleConv(d, d*2)
+        self.d3 = DownSampleConv(d*2, d*4)
+        self.d4 = DownSampleConv(d*4, d*8)
+        self.final = nn.Conv2d(d*8, 1, kernel_size=1)
 
     def forward(self, x, y):
         x = torch.cat([x, y], axis=1)
@@ -159,11 +164,15 @@ class BasicDiscriminator(nn.Module):
         x2 = self.d3(x1)
         x3 = self.d4(x2)
         xn = self.final(x3)
-        return torch.sigmoid(xn)
+        return xn
     
     def weight_init(self, mean, std):
         for m in self._modules:
             normal_init(self._modules[m], mean, std)
+
+    def set_requires_grad(self, requires_grad=False):
+        for param in self.parameters():
+            param.requires_grad = requires_grad
 
 
 if __name__ == "__main__":
