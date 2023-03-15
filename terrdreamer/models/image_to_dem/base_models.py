@@ -3,9 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 def normal_init(m, mean, std):
-    if isinstance(m, nn.ConvTranspose2d) or isinstance(m, nn.Conv2d):
-        m.weight.data.normal_(mean, std)
-        m.bias.data.zero_()
+    if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
+        torch.nn.init.normal_(m.weight, 0.0, 0.02)
+        torch.nn.init.constant_(m.bias, 0)
 
 
 class CustomUpsample(nn.Module):
@@ -19,126 +19,186 @@ class CustomUpsample(nn.Module):
         x = self._conv(x)
         return x
         
+class Upsample(nn.Module):
+    __doc__ = r"""Upsamples a given tensor by a factor of 2. Uses resize convolution to avoid checkerboard artifacts.
+    Input:
+        x: tensor of shape (N, in_channels, H, W)
+        time_emb: ignored
+        y: ignored
+    Output:
+        tensor of shape (N, in_channels, H * 2, W * 2)
+    Args:
+        in_channels (int): number of input channels
+    """
 
-class UNetGenerator(nn.Module):
-    # Just like the original paper
-    def __init__(self, in_channels:int, out_channels:int, d: int = 64):
-        # The number of channels is expected to be the sum of the number of channels of the input and the target
+    def __init__(self, in_channels):
         super().__init__()
-                # Unet encoder
-        self.conv1 = nn.Conv2d(in_channels, d, 4, 2, 1)
-        self.conv2 = nn.Conv2d(d, d * 2, 4, 2, 1)
-        self.conv2_bn = nn.BatchNorm2d(d * 2)
-        self.conv3 = nn.Conv2d(d * 2, d * 4, 4, 2, 1)
-        self.conv3_bn = nn.BatchNorm2d(d * 4)
-        self.conv4 = nn.Conv2d(d * 4, d * 8, 4, 2, 1)
-        self.conv4_bn = nn.BatchNorm2d(d * 8)
-        self.conv5 = nn.Conv2d(d * 8, d * 8, 4, 2, 1)
-        self.conv5_bn = nn.BatchNorm2d(d * 8)
-        self.conv6 = nn.Conv2d(d * 8, d * 8, 4, 2, 1)
-        self.conv6_bn = nn.BatchNorm2d(d * 8)
-        self.conv7 = nn.Conv2d(d * 8, d * 8, 4, 2, 1)
-        self.conv7_bn = nn.BatchNorm2d(d * 8)
-        self.conv8 = nn.Conv2d(d * 8, d * 8, 4, 2, 1)
-        # self.conv8_bn = nn.BatchNorm2d(d * 8)
 
-        # Unet decoder
-        self.deconv1 = CustomUpsample(d * 8, d * 8)
-        self.deconv1_bn = nn.BatchNorm2d(d * 8)
-        self.deconv2 = CustomUpsample(d * 8 * 2, d * 8)
-        self.deconv2_bn = nn.BatchNorm2d(d * 8)
-        self.deconv3 = CustomUpsample(d * 8 * 2, d * 8)
-        self.deconv3_bn = nn.BatchNorm2d(d * 8)
-        self.deconv4 = CustomUpsample(d * 8 * 2, d * 8)
-        self.deconv4_bn = nn.BatchNorm2d(d * 8)
-        self.deconv5 = CustomUpsample(d * 8 * 2, d * 4)
-        self.deconv5_bn = nn.BatchNorm2d(d * 4)
-        self.deconv6 = CustomUpsample(d * 4 * 2, d * 2)
-        self.deconv6_bn = nn.BatchNorm2d(d * 2)
-        self.deconv7 = CustomUpsample(d * 2 * 2, d)
-        self.deconv7_bn = nn.BatchNorm2d(d)
-        self.deconv8 = CustomUpsample(d * 2, out_channels)
-
-        # self.deconv1 = nn.ConvTranspose2d(d * 8, d * 8,4,2,1)
-        # self.deconv1_bn = nn.BatchNorm2d(d * 8)
-        # self.deconv2 = nn.ConvTranspose2d(d * 8 * 2, d * 8,4,2,1)
-        # self.deconv2_bn = nn.BatchNorm2d(d * 8)
-        # self.deconv3 = nn.ConvTranspose2d(d * 8 * 2, d * 8,4,2,1)
-        # self.deconv3_bn = nn.BatchNorm2d(d * 8)
-        # self.deconv4 = nn.ConvTranspose2d(d * 8 * 2, d * 8,4,2,1)
-        # self.deconv4_bn = nn.BatchNorm2d(d * 8)
-        # self.deconv5 = nn.ConvTranspose2d(d * 8 * 2, d * 4,4,2,1)
-        # self.deconv5_bn = nn.BatchNorm2d(d * 4)
-        # self.deconv6 = nn.ConvTranspose2d(d * 4 * 2, d * 2,4,2,1)
-        # self.deconv6_bn = nn.BatchNorm2d(d * 2)
-        # self.deconv7 = nn.ConvTranspose2d(d * 2 * 2, d,4,2,1)
-        # self.deconv7_bn = nn.BatchNorm2d(d)
-        # self.deconv8 = nn.ConvTranspose2d(d * 2, out_channels,4,2,1)
-        
-    def weight_init(self, mean, std):
-        for m in self._modules:
-            normal_init(self._modules[m], mean, std)
-        
-    def forward(self, input):
-        e1 = self.conv1(input)
-        e2 = self.conv2_bn(self.conv2(F.leaky_relu(e1, 0.2)))
-        e3 = self.conv3_bn(self.conv3(F.leaky_relu(e2, 0.2)))
-        e4 = self.conv4_bn(self.conv4(F.leaky_relu(e3, 0.2)))
-        e5 = self.conv5_bn(self.conv5(F.leaky_relu(e4, 0.2)))
-        e6 = self.conv6_bn(self.conv6(F.leaky_relu(e5, 0.2)))
-        e7 = self.conv7_bn(self.conv7(F.leaky_relu(e6, 0.2)))
-        e8 = self.conv8(F.leaky_relu(e7, 0.2))
-        # e8 = self.conv8_bn(self.conv8(F.leaky_relu(e7, 0.2)))
-        d1 = F.dropout(self.deconv1_bn(self.deconv1(F.relu(e8))), 0.5, training=True)
-        d1 = torch.cat([d1, e7], 1)
-        d2 = F.dropout(self.deconv2_bn(self.deconv2(F.relu(d1))), 0.5, training=True)
-        d2 = torch.cat([d2, e6], 1)
-        d3 = F.dropout(self.deconv3_bn(self.deconv3(F.relu(d2))), 0.5, training=True)
-        d3 = torch.cat([d3, e5], 1)
-        d4 = self.deconv4_bn(self.deconv4(F.relu(d3)))
-        # d4 = F.dropout(self.deconv4_bn(self.deconv4(F.relu(d3))), 0.5)
-        d4 = torch.cat([d4, e4], 1)
-        d5 = self.deconv5_bn(self.deconv5(F.relu(d4)))
-        d5 = torch.cat([d5, e3], 1)
-        d6 = self.deconv6_bn(self.deconv6(F.relu(d5)))
-        d6 = torch.cat([d6, e2], 1)
-        d7 = self.deconv7_bn(self.deconv7(F.relu(d6)))
-        d7 = torch.cat([d7, e1], 1)
-        d8 = self.deconv8(F.relu(d7))
-        o = torch.tanh(d8)
-
-        return o
+        self.upsample = nn.Sequential(
+            nn.Upsample(scale_factor=2, mode="nearest", align_corners=True),
+            nn.Conv2d(in_channels, in_channels, 3,padding="same"),
+        )
+    
+    def forward(self, x, time_emb, y):
+        return self.upsample(x)
 
 
-class BasicDiscriminator(nn.Module):
-    # initializers
-    def __init__(self, input_channels,d=64):
+class UpSampleConv(nn.Module):
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        kernel=4,
+        strides=2,
+        padding=1,
+        activation=True,
+        batchnorm=True,
+        dropout=False
+    ):
         super().__init__()
-        self.conv1 = nn.Conv2d(input_channels, d, 4, 2, 1)
-        self.conv2 = nn.Conv2d(d, d * 2, 4, 2, 1)
-        self.conv2_bn = nn.BatchNorm2d(d * 2)
-        self.conv3 = nn.Conv2d(d * 2, d * 4, 4, 2, 1)
-        self.conv3_bn = nn.BatchNorm2d(d * 4)
-        self.conv4 = nn.Conv2d(d * 4, d * 8, 4, 1, 1)
-        self.conv4_bn = nn.BatchNorm2d(d * 8)
-        self.conv5 = nn.Conv2d(d * 8, 1, 4, 1, 1)
+        self.activation = activation
+        self.batchnorm = batchnorm
+        self.dropout = dropout
 
-    # weight_init
-    def weight_init(self, mean, std):
-        for m in self._modules:
-            normal_init(self._modules[m], mean, std)
-            self._modules[m].bias.data.zero_()
+        self.upsample = nn.Upsample(scale_factor=2, mode='nearest')
+        self.deconv = nn.Conv2d(in_channels, out_channels, 3, padding=1)
 
-    # forward method
-    def forward(self, input, label):
-        x = torch.cat([input, label], 1)
-        x = F.leaky_relu(self.conv1(x), 0.2)
-        x = F.leaky_relu(self.conv2_bn(self.conv2(x)), 0.2)
-        x = F.leaky_relu(self.conv3_bn(self.conv3(x)), 0.2)
-        x = F.leaky_relu(self.conv4_bn(self.conv4(x)), 0.2)
-        x = torch.sigmoid(self.conv5(x))
+        if batchnorm:
+            self.bn = nn.BatchNorm2d(out_channels)
 
+        if activation:
+            self.act = nn.ReLU(True)
+
+        if dropout:
+            self.drop = nn.Dropout2d(0.5)
+
+    def forward(self, x):
+        x = self.upsample(x)
+        x = self.deconv(x)
+
+        if self.batchnorm:
+            x = self.bn(x)
+
+        if self.dropout:
+            x = self.drop(x)
+
+        if self.activation:
+            x = self.act(x)
+            
         return x
+
+class DownSampleConv(nn.Module):
+
+    def __init__(self, in_channels, out_channels, kernel=4, strides=2, padding=1, activation=True, batchnorm=True):
+        """
+        Paper details:
+        - C64-C128-C256-C512-C512-C512-C512-C512
+        - All convolutions are 4×4 spatial filters applied with stride 2
+        - Convolutions in the encoder downsample by a factor of 2
+        """
+        super().__init__()
+        self.activation = activation
+        self.batchnorm = batchnorm
+
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel, strides, padding)
+
+        if batchnorm:
+            self.bn = nn.BatchNorm2d(out_channels)
+
+        if activation:
+            self.act = nn.LeakyReLU(0.2)
+
+    def forward(self, x):
+        x = self.conv(x)
+        if self.batchnorm:
+            x = self.bn(x)
+        if self.activation:
+            x = self.act(x)
+        return x
+    
+class UNetGenerator(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        """
+        Paper details:
+        - Encoder: C64-C128-C256-C512-C512-C512-C512-C512
+        - All convolutions are 4×4 spatial filters applied with stride 2
+        - Convolutions in the encoder downsample by a factor of 2
+        - Decoder: CD512-CD1024-CD1024-C1024-C1024-C512 -C256-C128
+        """
+        super().__init__()
+
+        # encoder/donwsample convs
+        self.encoders = [
+            DownSampleConv(in_channels, 64, batchnorm=False),  # bs x 64 x 128 x 128
+            DownSampleConv(64, 128),  # bs x 128 x 64 x 64
+            DownSampleConv(128, 256),  # bs x 256 x 32 x 32
+            DownSampleConv(256, 512),  # bs x 512 x 16 x 16
+            DownSampleConv(512, 512),  # bs x 512 x 8 x 8
+            DownSampleConv(512, 512),  # bs x 512 x 4 x 4
+            DownSampleConv(512, 512),  # bs x 512 x 2 x 2
+            DownSampleConv(512, 512, batchnorm=False),  # bs x 512 x 1 x 1
+        ]
+
+        # decoder/upsample convs
+        self.decoders = [
+            UpSampleConv(512, 512, dropout=True),  # bs x 512 x 2 x 2
+            UpSampleConv(1024, 512, dropout=True),  # bs x 512 x 4 x 4
+            UpSampleConv(1024, 512, dropout=True),  # bs x 512 x 8 x 8
+            UpSampleConv(1024, 512),  # bs x 512 x 16 x 16
+            UpSampleConv(1024, 256),  # bs x 256 x 32 x 32
+            UpSampleConv(512, 128),  # bs x 128 x 64 x 64
+            UpSampleConv(256, 64),  # bs x 64 x 128 x 128
+        ]
+        self.decoder_channels = [512, 512, 512, 512, 256, 128, 64]
+        self.final_conv = nn.ConvTranspose2d(64, out_channels, kernel_size=4, stride=2, padding=1)
+        self.tanh = nn.Tanh()
+
+        self.encoders = nn.ModuleList(self.encoders)
+        self.decoders = nn.ModuleList(self.decoders)
+
+    def forward(self, x):
+        skips_cons = []
+        for encoder in self.encoders:
+            x = encoder(x)
+
+            skips_cons.append(x)
+
+        skips_cons = list(reversed(skips_cons[:-1]))
+        decoders = self.decoders[:-1]
+
+        for decoder, skip in zip(decoders, skips_cons):
+            x = decoder(x)
+            x = torch.cat((x, skip), axis=1)
+
+        x = self.decoders[-1](x)
+        x = self.final_conv(x)
+        return self.tanh(x)
+
+    def weight_init(self, mean, std):
+        for m in self._modules:
+            normal_init(self._modules[m], mean, std)
+        
+class BasicDiscriminator(nn.Module):
+    def __init__(self, input_channels):
+        super().__init__()
+        self.d1 = DownSampleConv(input_channels, 64, batchnorm=False)
+        self.d2 = DownSampleConv(64, 128)
+        self.d3 = DownSampleConv(128, 256)
+        self.d4 = DownSampleConv(256, 512)
+        self.final = nn.Conv2d(512, 1, kernel_size=1)
+
+    def forward(self, x, y):
+        x = torch.cat([x, y], axis=1)
+        x0 = self.d1(x)
+        x1 = self.d2(x0)
+        x2 = self.d3(x1)
+        x3 = self.d4(x2)
+        xn = self.final(x3)
+        return xn
+    
+    def weight_init(self, mean, std):
+        for m in self._modules:
+            normal_init(self._modules[m], mean, std)
 
 
 if __name__ == "__main__":
@@ -149,6 +209,6 @@ if __name__ == "__main__":
     print("Experimenting with the discriminator...")
     print(disc(input_rgb, target_dem).shape)
     
-    generator = UNetGenerator(3)
+    generator = UNetGenerator(3,1)
     print("Experimenting with the generator...")
     print(generator(input_rgb).shape)

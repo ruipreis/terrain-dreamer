@@ -6,8 +6,8 @@ import random
 from tqdm import tqdm
 import torch.nn as nn
 
-DEM_MIN_ELEVATION = -283
-DEM_MAX_ELEVATION = 7943
+DEM_MIN_ELEVATION = -82
+DEM_MAX_ELEVATION = 7219
 DEM_ELEVATION_MEAN = 780.5281
 DEM_ELEVATION_STD = 954.7249
 RGB_MEAN = torch.tensor([73.515, 68.865375, 52.41], dtype=torch.float32).unsqueeze(1).unsqueeze(1)
@@ -112,11 +112,13 @@ if __name__ == "__main__":
 
         # Grab some random indexes from the dataset
         if args.option == "dem":
-            indexes = np.random.randint(0, len(dataset), args.sample_size)
+            indexes = list(range(len(dataset)))
             gtif_tensor = torch.concatenate([dataset[i][1] for i in indexes], dim=0)
             print("GTIF Tensor Shape:", gtif_tensor.shape)
             print("GTIF Tensor Mean:", gtif_tensor.mean())
             print("GTIF Tensor Std:", gtif_tensor.std())
+            print("GTIF Tensor Min:", gtif_tensor.min())
+            print("GTIF Tensor Max:", gtif_tensor.max())
         elif args.option == "rgb":
             indexes = np.random.randint(0, len(dataset), args.sample_size)
             sat_tensor = torch.cat([dataset[i][0].unsqueeze(0) for i in indexes], dim=0)
