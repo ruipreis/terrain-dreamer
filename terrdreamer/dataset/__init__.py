@@ -133,4 +133,3 @@ if __name__ == "__main__":
             print("SAT Tensor Shape:", sat_tensor.shape)
             print("SAT Tensor Mean:", sat_tensor.mean(dim=(0, 2, 3)))
             print("SAT Tensor Std:", sat_tensor.std(dim=(0, 2, 3)))
-
