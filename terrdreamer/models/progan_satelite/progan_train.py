@@ -57,7 +57,7 @@ def trainer(
             loss_discriminator = (
                 -(torch.mean(discriminator_real) - torch.mean(discriminator_fake))
                 + progan_config.LAMBDA_GP * gp
-                + (0.001 * torch.mean(discriminator_real**2))
+                + (0.001 * torch.mean(discriminator_real ** 2))
             )
 
         discriminator_optimizer.zero_grad()
@@ -131,7 +131,7 @@ def main():
 
     for num_epochs in progan_config.PROGRESSIVE_EPOCHS[step:]:
         alpha = 1e-5
-        curr_image_size = 4 * 2**step
+        curr_image_size = 4 * 2 ** step
         print(f"Current image size: {curr_image_size}")
 
         # Load the dataset

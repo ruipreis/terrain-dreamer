@@ -14,30 +14,35 @@ import time
 import wandb
 import random
 
-LAMBDA =100
+LAMBDA = 100
 
 
 def train(
-    dataset_path:Path, test_dataset_path:Path, 
-    pretrained_generator_path,pretrained_discriminator_path,n_epochs:int=300, batch_size:int=8, beta1:float=.5, beta2:float=.999,lr:float=2e-4,
-    dem_to_image:bool=False, ndf:int=64, ngf:int=64,
+    dataset_path: Path,
+    test_dataset_path: Path,
+    pretrained_generator_path,
+    pretrained_discriminator_path,
+    n_epochs: int = 300,
+    batch_size: int = 8,
+    beta1: float = 0.5,
+    beta2: float = 0.999,
+    lr: float = 2e-4,
+    dem_to_image: bool = False,
+    ndf: int = 64,
+    ngf: int = 64,
 ):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Load the dataset
     train_dataset = AW3D30Dataset(dataset_path, limit=3000, swap=dem_to_image)
     test_dataset = AW3D30Dataset(test_dataset_path, limit=300, swap=dem_to_image)
-    
+
     aw3d30_loader = torch.utils.data.DataLoader(
-        train_dataset, 
-        batch_size=batch_size, 
-        shuffle=True
+        train_dataset, batch_size=batch_size, shuffle=True
     )
-    
+
     test_aw3d30_loader = torch.utils.data.DataLoader(
-        test_dataset,
-        batch_size=batch_size,
-        shuffle=True
+        test_dataset, batch_size=batch_size, shuffle=True
     )
 
     # Load the model to train on
@@ -55,10 +60,14 @@ def train(
 
     if pretrained_generator_path is not None:
         pix2pix_model.load_generator(pretrained_generator_path)
-    
+
     # Load the optimizers - we'll stick with the ones used in the paper
-    D_optimizer = torch.optim.Adam(pix2pix_model.discriminator.parameters(), lr=lr, betas=(beta1,beta2))
-    G_optimizer = torch.optim.Adam(pix2pix_model.generator.parameters(), lr=lr, betas=(beta1, beta2))
+    D_optimizer = torch.optim.Adam(
+        pix2pix_model.discriminator.parameters(), lr=lr, betas=(beta1, beta2)
+    )
+    G_optimizer = torch.optim.Adam(
+        pix2pix_model.generator.parameters(), lr=lr, betas=(beta1, beta2)
+    )
 
     # Place to the model on the GPU
     pix2pix_model.to(device)
@@ -75,9 +84,9 @@ def train(
             "test_D_loss": [],
             "test_G_loss": [],
         }
-        
+
         epoch_start_time = time.time()
-        
+
         for x, y in aw3d30_loader:
             # Place the data on the GPU
             x = x.to(device)
@@ -85,11 +94,15 @@ def train(
 
             # Discriminator Step (D)
             pix2pix_model.prepare_discriminator_step()
-            d_loss, d_real_loss, d_fake_loss = pix2pix_model.step_discriminator(x, y, D_optimizer)
+            d_loss, d_real_loss, d_fake_loss = pix2pix_model.step_discriminator(
+                x, y, D_optimizer
+            )
 
             # Generator Step (G)
             pix2pix_model.prepare_generator_step()
-            g_loss, g_bce_loss, g_l1_loss = pix2pix_model.step_generator(x, y, G_optimizer)
+            g_loss, g_bce_loss, g_l1_loss = pix2pix_model.step_generator(
+                x, y, G_optimizer
+            )
 
             # Add everything to the loss history
             loss_history["D_loss"].append(d_loss)
@@ -111,24 +124,21 @@ def train(
                 # Add everything to the loss history
                 loss_history["test_D_loss"].append(test_d_loss)
                 loss_history["test_G_loss"].append(test_g_loss)
-            
+
         epoch_end_time = time.time()
         per_epoch_ptime = epoch_end_time - epoch_start_time
 
         # Construct a log message
-        log_message = {
-            k:torch.mean(torch.tensor(v))
-            for k,v in loss_history.items()
-        }
+        log_message = {k: torch.mean(torch.tensor(v)) for k, v in loss_history.items()}
         log_message["per_epoch_ptime"] = per_epoch_ptime
 
         # Start testing the model on random images from the test dataset
         if epoch % 10 == 0:
             pix2pix_model.save(epoch)
-            
+
             # Use images at specific indexes to see if the model is learning anything,
             interest_indexes = random.sample(range(0, len(test_dataset)), 10)
-            
+
             with torch.no_grad():
                 src_imgs = []
                 src_dems = []
@@ -137,15 +147,15 @@ def train(
                 for i in interest_indexes:
                     # Get the image and the DEM
                     sat_rgb_img, dem_img = test_dataset[i]
-                    
+
                     sat_rgb_img = sat_rgb_img.unsqueeze(0).cuda()
                     dem_img = dem_img.unsqueeze(0).cuda()
-                    
+
                     gen_result = pix2pix_model.generator(sat_rgb_img)
 
                     # Sample the output DEM to see if it makes any sense
                     original_sat = sat_rgb_img[0].detach().cpu()
-                    
+
                     original_dem = dem_img[0].detach().cpu()
                     predicted_dem = gen_result[0].detach().cpu()
 
@@ -168,9 +178,10 @@ def train(
                     log_message["src_dems"] = [wandb.Image(img) for img in src_dems]
                     log_message["gen_dems"] = [wandb.Image(img) for img in gen_dems]
 
-        wandb.log(log_message)                
-                    
+        wandb.log(log_message)
+
     pix2pix_model.save(epoch)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -190,29 +201,26 @@ if __name__ == "__main__":
         pretrained_generator_path = args.pretrained_generator
     else:
         pretrained_generator_path = None
-        
+
     if args.pretrained_discriminator is not None:
         pretrained_discriminator_path = args.pretrained_discriminator
     else:
         pretrained_discriminator_path = None
 
-    wandb.init(
-        project="myprojects",
-        config=args
-    )
-        
+    wandb.init(project="myprojects", config=args)
+
     # Start training
     train(
-        args.train_dataset, 
-        args.test_dataset, 
+        args.train_dataset,
+        args.test_dataset,
         pretrained_generator_path,
         pretrained_discriminator_path,
-        n_epochs=args.n_epochs, 
+        n_epochs=args.n_epochs,
         batch_size=args.batch_size,
         lr=args.lr,
         dem_to_image=args.dem_to_image,
         ndf=args.ndf,
-        ngf=args.ngf
+        ngf=args.ngf,
     )
 
     wandb.finish()

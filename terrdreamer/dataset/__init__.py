@@ -7,44 +7,49 @@ from tqdm import tqdm
 
 from PIL import Image
 
-def tiff_to_jpg(tiff_data, convert:bool=False,out_path=None):
+
+def tiff_to_jpg(tiff_data, convert: bool = False, out_path=None):
     # Unnormalize the gtif
     tiff_data = (tiff_data + 1) / 2
     tiff_data = tiff_data * (DEM_MAX_ELEVATION - DEM_MIN_ELEVATION) + DEM_MIN_ELEVATION
-    
+
     # Normalize the tiff data based on it's min and max, this helps with visualization
     min_value = tiff_data.min()
     max_value = tiff_data.max()
     tiff_data = (tiff_data - min_value) / (max_value - min_value)
-    
+
     img = tiff_data.squeeze().numpy()
-    
+
     img = (img * 255).astype(np.uint8)
-    
+
     img = Image.fromarray(img)
     img = img.convert("L")
-    
+
     if convert:
         img.save(out_path)
 
     return img
 
+
 DEM_MIN_ELEVATION = -82
 DEM_MAX_ELEVATION = 7219
 
+
 class AW3D30Dataset(Dataset):
-    def __init__(self,path:Path, limit=None, normalize:bool=True, swap:bool=False):
+    def __init__(
+        self, path: Path, limit=None, normalize: bool = True, swap: bool = False
+    ):
         self._available_files = list(path.glob("*.npz"))
-        
+
         if limit is not None:
             self._available_files = random.sample(self._available_files, limit)
-        
+
         self._normalize = normalize
         self._swap = swap
 
     def __len__(self):
         return len(self._available_files)
-    
+
     def __getitem__(self, idx):
         data = np.load(self._available_files[idx])
 
@@ -58,20 +63,20 @@ class AW3D30Dataset(Dataset):
         sat = sat.permute(2, 0, 1)
 
         if self._normalize:
-            sat = (sat/127.5)-1
-            gtif = (gtif-DEM_MIN_ELEVATION) / (DEM_MAX_ELEVATION - DEM_MIN_ELEVATION)
-            gtif = gtif*2 - 1
+            sat = (sat / 127.5) - 1
+            gtif = (gtif - DEM_MIN_ELEVATION) / (DEM_MAX_ELEVATION - DEM_MIN_ELEVATION)
+            gtif = gtif * 2 - 1
 
         if self._swap:
             return gtif, sat
 
         return sat, gtif
-    
+
     def to_img(self, sat_img):
-        unnormalized_sat = (sat_img + 1) *127.5
+        unnormalized_sat = (sat_img + 1) * 127.5
         unnormalized_sat = unnormalized_sat.permute(1, 2, 0).numpy().astype(np.uint8)
         return unnormalized_sat
-    
+
     def to_gtif(self, dem):
         return tiff_to_jpg(dem, convert=False)
 
@@ -85,19 +90,19 @@ if __name__ == "__main__":
     parser.add_argument("--sample-dem", action="store_true")
     parser.add_argument("--check-sea", action="store_true")
     parser.add_argument("--sample-size", type=int, default=10000)
-    parser.add_argument("--option", choices=["rgb","dem"])
+    parser.add_argument("--option", choices=["rgb", "dem"])
     args = parser.parse_args()
 
     if args.sample_dem:
         # Try to grab a dem at random from the dataset and convert it to image
         dataset = AW3D30Dataset(args.dataset, "cpu", normalize=True)
         sat, gtif = dataset[np.random.randint(0, len(dataset))]
-        
+
         print(gtif.shape, gtif.min(), gtif.max())
-        
+
         # Convert the gtif to an BW image
         from PIL import Image
-        
+
         # Find the first image whose amplitude is greater than 100
         tiff_to_jpg(gtif, out_path="gtif.jpg", convert=True)
     elif args.check_sea:
@@ -114,7 +119,9 @@ if __name__ == "__main__":
             if is_sea:
                 sea_count += 1
 
-        print(f"Sea count: {sea_count}, Total: {len(dataset)}, Percentage: {sea_count / len(dataset) * 100}%")
+        print(
+            f"Sea count: {sea_count}, Total: {len(dataset)}, Percentage: {sea_count / len(dataset) * 100}%"
+        )
     else:
         dataset = AW3D30Dataset(args.dataset, normalize=False)
 

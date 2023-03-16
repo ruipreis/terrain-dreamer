@@ -3,7 +3,7 @@ import numpy as np
 
 def generate_perlin_noise_2d(shape, res):
     def f(t):
-        return 6 * t**5 - 15 * t**4 + 10 * t**3
+        return 6 * t ** 5 - 15 * t ** 4 + 10 * t ** 3
 
     delta = (res[0] / shape[0], res[1] / shape[1])
     d = (shape[0] // res[0], shape[1] // res[1])

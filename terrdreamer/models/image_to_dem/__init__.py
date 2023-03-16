@@ -1,13 +1,26 @@
 import torch
 import torch.nn as nn
 
-from terrdreamer.models.image_to_dem.base_models import BasicDiscriminator, UNetGenerator
+from terrdreamer.models.image_to_dem.base_models import (
+    BasicDiscriminator,
+    UNetGenerator,
+)
+
+# Some tricks were adopted from the followings tips:
+# https://github.com/soumith/ganhacks/blob/master/README.md
 
 
 class DEM_Pix2Pix:
-    def __init__(self, in_channels:int, out_channels:int, lambda_l1=100, ngf:int=64, ndf:int=64):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        lambda_l1=100,
+        ngf: int = 64,
+        ndf: int = 64,
+    ):
         self.generator = UNetGenerator(in_channels, out_channels, d=ngf)
-        self.discriminator = BasicDiscriminator(in_channels+out_channels, d=ndf)
+        self.discriminator = BasicDiscriminator(in_channels + out_channels, d=ndf)
         self.bce_loss = nn.BCEWithLogitsLoss()
         self.l1_loss = nn.L1Loss()
         self.l1_lambda = lambda_l1
@@ -35,27 +48,32 @@ class DEM_Pix2Pix:
         optimizer.step()
 
         return loss, real_loss.item(), fake_loss.item()
-    
+
     def step_generator(self, x, y, optimizer):
         fakeY = self.generator(x)
         fake_AB = self.discriminator(x, fakeY)
 
-        bce_loss = self.bce_loss(fake_AB, torch.ones_like(fake_AB)) 
-        l1_loss = self.l1_loss(fakeY, y)*self.l1_lambda
+        bce_loss = self.bce_loss(fake_AB, torch.ones_like(fake_AB))
+        l1_loss = self.l1_loss(fakeY, y) * self.l1_lambda
         loss = bce_loss + l1_loss
 
         loss.backward()
         optimizer.step()
 
         return loss, bce_loss.item(), l1_loss.item()
-    
+
     def test(self, x, y):
         fakeY = self.generator(x)
         fake_AB = self.discriminator(x, fakeY)
         real_AB = self.discriminator(x, y)
 
-        D_loss = self.bce_loss(fake_AB, torch.zeros_like(fake_AB)) + self.bce_loss(real_AB, torch.ones_like(real_AB))
-        G_loss = self.bce_loss(fake_AB, torch.ones_like(fake_AB)) + self.l1_loss(fakeY, y)*self.l1_lambda
+        D_loss = self.bce_loss(fake_AB, torch.zeros_like(fake_AB)) + self.bce_loss(
+            real_AB, torch.ones_like(real_AB)
+        )
+        G_loss = (
+            self.bce_loss(fake_AB, torch.ones_like(fake_AB))
+            + self.l1_loss(fakeY, y) * self.l1_lambda
+        )
 
         return fakeY, D_loss, G_loss
 
@@ -73,6 +91,6 @@ class DEM_Pix2Pix:
         self.generator.to(device)
         self.discriminator.to(device)
 
-    def save(self, epoch_no:int):
+    def save(self, epoch_no: int):
         torch.save(self.generator.state_dict(), f"generator_{epoch_no}.pt")
         torch.save(self.discriminator.state_dict(), f"discriminator_{epoch_no}.pt")

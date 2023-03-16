@@ -13,30 +13,32 @@ from tqdm import tqdm
 MIN_ELEVATION = -283
 MAX_ELEVATION = 7943
 
-def _find_bounds(sat_folder:Path,gtif_folder: Path):
+
+def _find_bounds(sat_folder: Path, gtif_folder: Path):
     # Only considers gtif files that have a match sat file
     sat_files = [x.stem for x in list(sat_folder.glob("*.jpg"))]
-    
+
     # Open all the gTIF files and find the min and max elevation
     min_elevation = float("inf")
     max_elevation = -float("inf")
-    
+
     for sat_id in tqdm(sat_files):
         gtif_file = gtif_folder / f"{sat_id}.tif"
-        
+
         with rasterio.open(gtif_file) as src:
             gtif_data = np.array(src.read(1))
-            
+
             # Only consider if 50% of the pixels are above sea level
-            if ( (gtif_data <= 0).sum() / gtif_data.size ) > 0.5:
+            if ((gtif_data <= 0).sum() / gtif_data.size) > 0.5:
                 print("Found invalid gTIF file: ", gtif_file)
                 continue
-                
+
             min_elevation = min(min_elevation, gtif_data.min())
             max_elevation = max(max_elevation, gtif_data.max())
-            
+
     return min_elevation, max_elevation
-    
+
+
 def prepare_dataset(sat_folder: Path, gtif_folder: Path, out_path: Path):
     def _read_sat_and_gtif(sat_file: Path, gtif_file: Path):
         # For each satellite image, we need to know the width and height
@@ -62,7 +64,7 @@ def prepare_dataset(sat_folder: Path, gtif_folder: Path, out_path: Path):
 
                 # Need to validate the gTIF patch before sending to writer thread,
                 # to be a part of the dataset atleast 50% of the pixels must be above sea level
-                if ( (gtif_patch <= 0).sum() / gtif_patch.size ) > 0.5:
+                if ((gtif_patch <= 0).sum() / gtif_patch.size) > 0.5:
                     continue
 
                 # Now simply write the patches to the output folder
@@ -76,10 +78,9 @@ def prepare_dataset(sat_folder: Path, gtif_folder: Path, out_path: Path):
     sat_gtif_pairs = [
         (sat_file, gtif_folder / f"{sat_file.stem}.tif") for sat_file in sat_files
     ]
-    
+
     for sat_file, gtif_file in tqdm(sat_gtif_pairs):
         _read_sat_and_gtif(sat_file, gtif_file)
-
 
 
 if __name__ == "__main__":
@@ -91,7 +92,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.find_bounds:
-        min_value, max_value=_find_bounds(args.sat_folder,args.gtif_folder)
+        min_value, max_value = _find_bounds(args.sat_folder, args.gtif_folder)
         print("Min elevation: ", min_value)
         print("Max elevation: ", max_value)
     else:
