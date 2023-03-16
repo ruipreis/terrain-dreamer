@@ -37,7 +37,12 @@ DEM_MAX_ELEVATION = 7219
 
 class AW3D30Dataset(Dataset):
     def __init__(
-        self, path: Path, limit=None, normalize: bool = True, swap: bool = False
+        self,
+        path: Path,
+        limit=None,
+        normalize: bool = True,
+        swap: bool = False,
+        transforms=None,
     ):
         self._available_files = list(path.glob("*.npz"))
 
@@ -46,6 +51,7 @@ class AW3D30Dataset(Dataset):
 
         self._normalize = normalize
         self._swap = swap
+        self._transforms = transforms
 
     def __len__(self):
         return len(self._available_files)
@@ -66,6 +72,9 @@ class AW3D30Dataset(Dataset):
             sat = (sat / 127.5) - 1
             gtif = (gtif - DEM_MIN_ELEVATION) / (DEM_MAX_ELEVATION - DEM_MIN_ELEVATION)
             gtif = gtif * 2 - 1
+
+        if self._transforms is not None:
+            sat, gtif = self._transforms(sat, gtif)
 
         if self._swap:
             return gtif, sat

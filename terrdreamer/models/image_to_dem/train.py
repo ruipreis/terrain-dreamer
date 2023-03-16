@@ -14,7 +14,39 @@ import time
 import wandb
 import random
 
+from torchvision import transforms
+import torchvision.transforms.functional as TF
+
+import random
+
 LAMBDA = 100
+
+
+# In this case we need to perform segmentation on the image, thus we need to use
+# functional torchvision transforms - to perform the same transform on the
+# segmentation mask
+def my_transforms(image, mask):
+    # Random horizontal flipping
+    if random.random() > 0.5:
+        image = TF.hflip(image)
+        mask = TF.hflip(mask)
+
+    # Random vertical flipping
+    if random.random() > 0.5:
+        image = TF.vflip(image)
+        mask = TF.vflip(mask)
+
+    # Random perform a random resized crop, the inputs are 256x256, the
+    # resize is performed to 286x286, then a random crop of 256x256 is
+    # performed
+    if random.random() > 0.5:
+        i, j, h, w = transforms.RandomResizedCrop.get_params(
+            image, scale=(0.8, 1.0), ratio=(1.0, 1.0)
+        )
+        image = TF.resized_crop(image, i, j, h, w, (256, 256))
+        mask = TF.resized_crop(mask, i, j, h, w, (256, 256))
+
+    return image, mask
 
 
 def train(
@@ -30,11 +62,15 @@ def train(
     dem_to_image: bool = False,
     ndf: int = 64,
     ngf: int = 64,
+    label_smoothing: bool = True,
+    label_smoothing_factor: float = 0.1,
 ):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Load the dataset
-    train_dataset = AW3D30Dataset(dataset_path, limit=3000, swap=dem_to_image)
+    train_dataset = AW3D30Dataset(
+        dataset_path, limit=3000, swap=dem_to_image, transforms=my_transforms
+    )
     test_dataset = AW3D30Dataset(test_dataset_path, limit=300, swap=dem_to_image)
 
     aw3d30_loader = torch.utils.data.DataLoader(
@@ -47,9 +83,25 @@ def train(
 
     # Load the model to train on
     if dem_to_image:
-        pix2pix_model = DEM_Pix2Pix(1, 3, lambda_l1=LAMBDA, ngf=ngf, ndf=ndf)
+        pix2pix_model = DEM_Pix2Pix(
+            1,
+            3,
+            lambda_l1=LAMBDA,
+            ngf=ngf,
+            ndf=ndf,
+            label_smoothing=label_smoothing,
+            label_smoothing_factor=label_smoothing_factor,
+        )
     else:
-        pix2pix_model = DEM_Pix2Pix(3, 1, lambda_l1=LAMBDA, ngf=ngf, ndf=ndf)
+        pix2pix_model = DEM_Pix2Pix(
+            3,
+            1,
+            lambda_l1=LAMBDA,
+            ngf=ngf,
+            ndf=ndf,
+            label_smoothing=label_smoothing,
+            label_smoothing_factor=label_smoothing_factor,
+        )
 
     # Initialize the weights to have mean 0 and standard deviation 0.02
     pix2pix_model.weight_init(mean=0.0, std=0.02)
@@ -190,11 +242,13 @@ if __name__ == "__main__":
     parser.add_argument("--n-epochs", type=int, default=300)
     parser.add_argument("--ndf", type=int, default=64)
     parser.add_argument("--ngf", type=int, default=64)
-    parser.add_argument("--batch-size", type=int, default=1)
+    parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--lr", type=float, default=2e-4)
     parser.add_argument("--pretrained-generator", type=Path, default=None)
     parser.add_argument("--pretrained-discriminator", type=Path, default=None)
     parser.add_argument("--dem-to-image", action="store_true")
+    parser.add_argument("--label-smoothing", action="store_true")
+    parser.add_argument("--label-smoothing-factor", type=float, default=0.1)
     args = parser.parse_args()
 
     if args.pretrained_generator is not None:
@@ -221,6 +275,8 @@ if __name__ == "__main__":
         dem_to_image=args.dem_to_image,
         ndf=args.ndf,
         ngf=args.ngf,
+        label_smoothing=args.label_smoothing,
+        label_smoothing_factor=args.label_smoothing_factor,
     )
 
     wandb.finish()

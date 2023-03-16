@@ -18,12 +18,19 @@ class DEM_Pix2Pix:
         lambda_l1=100,
         ngf: int = 64,
         ndf: int = 64,
+        # Label smoothing - this allows to not be too confident about the labels
+        # According to https://github.com/soumith/ganhacks/issues/10, label smoothing
+        # should only occur in the discriminator
+        label_smoothing: bool = True,
+        label_smoothing_factor: float = 0.1,
     ):
         self.generator = UNetGenerator(in_channels, out_channels, d=ngf)
         self.discriminator = BasicDiscriminator(in_channels + out_channels, d=ndf)
         self.bce_loss = nn.BCEWithLogitsLoss()
         self.l1_loss = nn.L1Loss()
         self.l1_lambda = lambda_l1
+        self.label_smoothing = label_smoothing
+        self.label_smoothing_factor = label_smoothing_factor
 
     def prepare_discriminator_step(self):
         self.discriminator.set_requires_grad(True)
@@ -40,7 +47,14 @@ class DEM_Pix2Pix:
         real_AB = self.discriminator(x, y)
         fake_AB = self.discriminator(x, fakeY.detach())
 
-        real_loss = self.bce_loss(real_AB, torch.ones_like(real_AB))
+        # Get the expected real labels
+        real_labels = torch.ones_like(real_AB)
+        
+        # If label smoothing is enabled, we'll make the labels a bit smaller
+        if self.label_smoothing:
+            real_labels = real_labels - self.label_smoothing_factor
+
+        real_loss = self.bce_loss(real_AB, real_labels)
         fake_loss = self.bce_loss(fake_AB, torch.zeros_like(fake_AB))
         loss = (real_loss + fake_loss) / 2
 
