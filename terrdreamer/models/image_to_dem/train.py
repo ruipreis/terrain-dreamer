@@ -69,9 +69,9 @@ def train(
 
     # Load the dataset
     train_dataset = AW3D30Dataset(
-        dataset_path, limit=3000, swap=dem_to_image, transforms=my_transforms
+        dataset_path, swap=dem_to_image, transforms=my_transforms
     )
-    test_dataset = AW3D30Dataset(test_dataset_path, limit=300, swap=dem_to_image)
+    test_dataset = AW3D30Dataset(test_dataset_path, swap=dem_to_image)
 
     aw3d30_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=batch_size, shuffle=True
