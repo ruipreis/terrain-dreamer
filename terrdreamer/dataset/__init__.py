@@ -7,6 +7,40 @@ from tqdm import tqdm
 
 from PIL import Image
 
+from torchvision import transforms
+import torchvision.transforms.functional as TF
+
+import random
+
+LAMBDA = 100
+
+
+# In this case we need to perform segmentation on the image, thus we need to use
+# functional torchvision transforms - to perform the same transform on the
+# segmentation mask
+def my_transforms(image, mask):
+    # Random horizontal flipping
+    if random.random() > 0.5:
+        image = TF.hflip(image)
+        mask = TF.hflip(mask)
+
+    # Random vertical flipping
+    if random.random() > 0.5:
+        image = TF.vflip(image)
+        mask = TF.vflip(mask)
+
+    # Random perform a random resized crop, the inputs are 256x256, the
+    # resize is performed to 286x286, then a random crop of 256x256 is
+    # performed
+    if random.random() > 0.5:
+        i, j, h, w = transforms.RandomResizedCrop.get_params(
+            image, scale=(0.8, 1.0), ratio=(1.0, 1.0)
+        )
+        image = TF.resized_crop(image, i, j, h, w, (256, 256))
+        mask = TF.resized_crop(mask, i, j, h, w, (256, 256))
+
+    return image, mask
+
 
 def tiff_to_jpg(tiff_data, convert: bool = False, out_path=None):
     # Unnormalize the gtif
@@ -42,7 +76,7 @@ class AW3D30Dataset(Dataset):
         limit=None,
         normalize: bool = True,
         swap: bool = False,
-        transforms=None,
+        transforms=False,
     ):
         self._available_files = list(path.glob("*.npz"))
 
@@ -51,7 +85,11 @@ class AW3D30Dataset(Dataset):
 
         self._normalize = normalize
         self._swap = swap
-        self._transforms = transforms
+
+        if transforms:
+            self._transforms = my_transforms
+        else:
+            self._transforms = None
 
     def __len__(self):
         return len(self._available_files)
@@ -98,6 +136,7 @@ if __name__ == "__main__":
     parser.add_argument("--dataset", type=Path, required=True)
     parser.add_argument("--sample-dem", action="store_true")
     parser.add_argument("--check-sea", action="store_true")
+    parser.add_argument("--check-transforms", action="store_true")
     parser.add_argument("--sample-size", type=int, default=10000)
     parser.add_argument("--option", choices=["rgb", "dem"])
     args = parser.parse_args()
@@ -131,6 +170,26 @@ if __name__ == "__main__":
         print(
             f"Sea count: {sea_count}, Total: {len(dataset)}, Percentage: {sea_count / len(dataset) * 100}%"
         )
+    elif args.check_transforms:
+        dataset = AW3D30Dataset(args.dataset, normalize=True, transforms=True)
+
+        # Sample the same image 10 times
+        rand_idx = np.random.randint(0, len(dataset))
+
+        for i in range(10):
+            sat, gtif = dataset[rand_idx]
+
+            # Convert the gtif to an BW image
+            from PIL import Image
+
+            # Find the first image whose amplitude is greater than 100
+            tiff_to_jpg(gtif, out_path=f"gtif_{i}.jpg", convert=True)
+
+            # Convert the sat to an RGB image
+            sat_img = dataset.to_img(sat)
+            sat_img = Image.fromarray(sat_img)
+            sat_img.save(f"sat_{i}.jpg")
+
     else:
         dataset = AW3D30Dataset(args.dataset, normalize=False)
 

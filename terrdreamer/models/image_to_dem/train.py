@@ -14,39 +14,7 @@ import time
 import wandb
 import random
 
-from torchvision import transforms
-import torchvision.transforms.functional as TF
-
-import random
-
 LAMBDA = 100
-
-
-# In this case we need to perform segmentation on the image, thus we need to use
-# functional torchvision transforms - to perform the same transform on the
-# segmentation mask
-def my_transforms(image, mask):
-    # Random horizontal flipping
-    if random.random() > 0.5:
-        image = TF.hflip(image)
-        mask = TF.hflip(mask)
-
-    # Random vertical flipping
-    if random.random() > 0.5:
-        image = TF.vflip(image)
-        mask = TF.vflip(mask)
-
-    # Random perform a random resized crop, the inputs are 256x256, the
-    # resize is performed to 286x286, then a random crop of 256x256 is
-    # performed
-    if random.random() > 0.5:
-        i, j, h, w = transforms.RandomResizedCrop.get_params(
-            image, scale=(0.8, 1.0), ratio=(1.0, 1.0)
-        )
-        image = TF.resized_crop(image, i, j, h, w, (256, 256))
-        mask = TF.resized_crop(mask, i, j, h, w, (256, 256))
-
-    return image, mask
 
 
 def train(
@@ -64,14 +32,17 @@ def train(
     ngf: int = 64,
     label_smoothing: bool = True,
     label_smoothing_factor: float = 0.1,
+    sample_size: int = 10000,
 ):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Load the dataset
     train_dataset = AW3D30Dataset(
-        dataset_path, swap=dem_to_image, transforms=my_transforms
+        dataset_path, swap=dem_to_image, transforms=True, limit=sample_size
     )
-    test_dataset = AW3D30Dataset(test_dataset_path, swap=dem_to_image)
+    test_dataset = AW3D30Dataset(
+        test_dataset_path, swap=dem_to_image, limit=sample_size // 10
+    )
 
     aw3d30_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=batch_size, shuffle=True
@@ -242,13 +213,14 @@ if __name__ == "__main__":
     parser.add_argument("--n-epochs", type=int, default=300)
     parser.add_argument("--ndf", type=int, default=64)
     parser.add_argument("--ngf", type=int, default=64)
-    parser.add_argument("--batch-size", type=int, default=4)
+    parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--lr", type=float, default=2e-4)
     parser.add_argument("--pretrained-generator", type=Path, default=None)
     parser.add_argument("--pretrained-discriminator", type=Path, default=None)
     parser.add_argument("--dem-to-image", action="store_true")
     parser.add_argument("--label-smoothing", action="store_true")
     parser.add_argument("--label-smoothing-factor", type=float, default=0.1)
+    parser.add_argument("--sample-size", type=int, default=8000)
     args = parser.parse_args()
 
     if args.pretrained_generator is not None:
@@ -277,6 +249,7 @@ if __name__ == "__main__":
         ngf=args.ngf,
         label_smoothing=args.label_smoothing,
         label_smoothing_factor=args.label_smoothing_factor,
+        sample_size=args.sample_size,
     )
 
     wandb.finish()
