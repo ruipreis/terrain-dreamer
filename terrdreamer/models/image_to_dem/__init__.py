@@ -23,14 +23,19 @@ class DEM_Pix2Pix:
         # should only occur in the discriminator
         label_smoothing: bool = True,
         label_smoothing_factor: float = 0.1,
+        # Indicates if the model should be run on inference, if this is the case
+        # only the generator will be loaded and no loss.
+        inference: bool = False,
     ):
         self.generator = UNetGenerator(in_channels, out_channels, d=ngf)
-        self.discriminator = BasicDiscriminator(in_channels + out_channels, d=ndf)
-        self.bce_loss = nn.BCEWithLogitsLoss()
-        self.l1_loss = nn.L1Loss()
-        self.l1_lambda = lambda_l1
-        self.label_smoothing = label_smoothing
-        self.label_smoothing_factor = label_smoothing_factor
+
+        if not inference:
+            self.discriminator = BasicDiscriminator(in_channels + out_channels, d=ndf)
+            self.bce_loss = nn.BCEWithLogitsLoss()
+            self.l1_loss = nn.L1Loss()
+            self.l1_lambda = lambda_l1
+            self.label_smoothing = label_smoothing
+            self.label_smoothing_factor = label_smoothing_factor
 
     def prepare_discriminator_step(self):
         self.discriminator.set_requires_grad(True)

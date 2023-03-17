@@ -100,7 +100,6 @@ class AW3D30Dataset(Dataset):
         # Make sure gtif and sat is shaped correctly
         gtif = gtif.unsqueeze(0)
 
-        # @TODO: maybe change this to 2, 0, 1
         sat = sat.permute(2, 0, 1)
 
         if self._normalize:
