@@ -1,18 +1,18 @@
 import argparse
+import random
+import time
+from pathlib import Path
 
 import torch
 import torch.nn as nn
 
-# Load the models to train on
-from terrdreamer.models.image_to_dem import DEM_Pix2Pix
+import wandb
 
 # Load the dataset
 from terrdreamer.dataset import AW3D30Dataset
 
-from pathlib import Path
-import time
-import wandb
-import random
+# Load the models to train on
+from terrdreamer.models.image_to_dem import DEM_Pix2Pix
 
 LAMBDA = 100
 
@@ -33,12 +33,13 @@ def train(
     label_smoothing: bool = True,
     label_smoothing_factor: float = 0.1,
     sample_size: int = 10000,
+    use_transforms: bool = True,
 ):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Load the dataset
     train_dataset = AW3D30Dataset(
-        dataset_path, swap=dem_to_image, transforms=True, limit=sample_size
+        dataset_path, swap=dem_to_image, transforms=use_transforms, limit=sample_size
     )
     test_dataset = AW3D30Dataset(
         test_dataset_path, swap=dem_to_image, limit=sample_size // 10
@@ -219,8 +220,9 @@ if __name__ == "__main__":
     parser.add_argument("--pretrained-discriminator", type=Path, default=None)
     parser.add_argument("--dem-to-image", action="store_true")
     parser.add_argument("--label-smoothing", action="store_true")
-    parser.add_argument("--label-smoothing-factor", type=float, default=0.1)
-    parser.add_argument("--sample-size", type=int, default=8000)
+    parser.add_argument("--use-transforms", action="store_true")
+    parser.add_argument("--label-smoothing-factor", type=float, default=0.2)
+    parser.add_argument("--sample-size", type=int, default=4000)
     args = parser.parse_args()
 
     if args.pretrained_generator is not None:
@@ -250,6 +252,7 @@ if __name__ == "__main__":
         label_smoothing=args.label_smoothing,
         label_smoothing_factor=args.label_smoothing_factor,
         sample_size=args.sample_size,
+        use_transforms=args.use_transforms,
     )
 
     wandb.finish()

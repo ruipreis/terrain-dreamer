@@ -1,12 +1,13 @@
-from pathlib import Path
 import argparse
 import random
-from PIL import Image
-import rasterio
-import numpy as np
-import zipfile
 import tempfile
+import zipfile
+from pathlib import Path
+
+import numpy as np
+import rasterio
 import ray
+from PIL import Image
 from ray.util.queue import Queue
 from tqdm import tqdm
 

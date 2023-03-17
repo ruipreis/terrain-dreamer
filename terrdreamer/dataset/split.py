@@ -1,8 +1,8 @@
 # Separate the dataset into train and test
-from typing import Tuple
 import random
-from pathlib import Path
 import shutil
+from pathlib import Path
+from typing import Tuple
 
 
 def split_train_test(

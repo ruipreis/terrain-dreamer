@@ -1,7 +1,8 @@
+from math import log2
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from math import log2
 
 factors = [1, 1, 1, 1, 1 / 2, 1 / 4, 1 / 8]
 

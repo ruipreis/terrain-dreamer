@@ -1,5 +1,6 @@
-import torch
 from pathlib import Path
+
+import torch
 
 START_TRAIN_AT_IMG_SIZE = 4
 DATASET = Path("terrdreamer/dataset/data/aw3d30")

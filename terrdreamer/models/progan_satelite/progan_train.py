@@ -1,19 +1,19 @@
+from math import log2
+from pathlib import Path
+
+# Load configs & utils
+import progan_config
 import torch
 import torch.nn as nn
 
 # Load the model
-from progan import Generator, Discriminator
+from progan import Discriminator, Generator
+from progan_utils import gradient_penalty, plot_to_tensorboard, save_checkpoint
+from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
 
 # Load the dataset
 from terrdreamer.dataset import AW3D30Dataset, tiff_to_jpg
-from pathlib import Path
-from tqdm import tqdm
-
-# Load configs & utils
-import progan_config
-from progan_utils import gradient_penalty, save_checkpoint, plot_to_tensorboard
-from torch.utils.tensorboard import SummaryWriter
-from math import log2
 
 # Improves training speed
 torch.backends.cudnn.benchmark = True

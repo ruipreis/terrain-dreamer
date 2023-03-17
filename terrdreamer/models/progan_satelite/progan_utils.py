@@ -1,7 +1,7 @@
+import progan_config
 import torch
 import torch.nn as nn
 import torchvision
-import progan_config
 
 
 def plot_to_tensorboard(writer, loss_critic, loss_gen, real, fake, tensorboard_step):

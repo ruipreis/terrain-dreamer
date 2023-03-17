@@ -1,14 +1,12 @@
+import os
 import re
 import zipfile
+from multiprocessing import Pool
 from pathlib import Path
 from typing import List
 
-from tqdm.contrib.concurrent import process_map
-
-import os
-from multiprocessing import Pool
-
 import requests
+from tqdm.contrib.concurrent import process_map
 
 
 def download_file(sample, folder):

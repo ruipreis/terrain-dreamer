@@ -1,16 +1,13 @@
-import torch
-from torch.utils.data import Dataset
-import numpy as np
+import random
 from pathlib import Path
-import random
-from tqdm import tqdm
 
-from PIL import Image
-
-from torchvision import transforms
+import numpy as np
+import torch
 import torchvision.transforms.functional as TF
-
-import random
+from PIL import Image
+from torch.utils.data import Dataset
+from torchvision import transforms
+from tqdm import tqdm
 
 LAMBDA = 100
 
@@ -130,6 +127,7 @@ class AW3D30Dataset(Dataset):
 
 if __name__ == "__main__":
     import argparse
+
     from tqdm import tqdm
 
     parser = argparse.ArgumentParser()

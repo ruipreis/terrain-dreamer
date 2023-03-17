@@ -48,11 +48,11 @@ class DEM_Pix2Pix:
         fake_AB = self.discriminator(x, fakeY.detach())
 
         # Get the expected real labels
-        real_labels = torch.ones_like(real_AB)
-        
+        real_labels = torch.ones_like(real_AB).detach()
+
         # If label smoothing is enabled, we'll make the labels a bit smaller
         if self.label_smoothing:
-            real_labels = real_labels - self.label_smoothing_factor
+            real_labels = real_labels.fill_(1 - self.label_smoothing_factor)
 
         real_loss = self.bce_loss(real_AB, real_labels)
         fake_loss = self.bce_loss(fake_AB, torch.zeros_like(fake_AB))
