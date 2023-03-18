@@ -4,7 +4,6 @@ import time
 from pathlib import Path
 
 import torch
-import torch.nn as nn
 
 import wandb
 
@@ -164,6 +163,9 @@ def train(
         # Construct a log message
         log_message = {k: torch.mean(torch.tensor(v)) for k, v in loss_history.items()}
         log_message["per_epoch_ptime"] = per_epoch_ptime
+
+        # Call torch cuda empty cache to free up memory
+        torch.cuda.empty_cache()
 
         # Start testing the model on random images from the test dataset
         if epoch % 10 == 0:

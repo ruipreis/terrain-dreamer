@@ -105,7 +105,7 @@ class DEM_Pix2Pix:
         loss.backward()
         optimizer.step()
 
-        return loss, real_loss.item(), fake_loss.item()
+        return loss.item(), real_loss.item(), fake_loss.item()
 
     def step_generator(self, x, y, optimizer):
         fakeY = self.generator(x)
@@ -124,7 +124,11 @@ class DEM_Pix2Pix:
         loss.backward()
         optimizer.step()
 
-        return loss, (bce_loss.item() if bce_loss is not None else None), l1_loss.item()
+        return (
+            loss.item(),
+            (bce_loss.item() if bce_loss is not None else None),
+            l1_loss.item(),
+        )
 
     def test(self, x, y):
         fakeY = self.generator(x)
