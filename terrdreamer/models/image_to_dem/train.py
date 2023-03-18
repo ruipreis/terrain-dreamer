@@ -34,6 +34,8 @@ def train(
     label_smoothing_factor: float = 0.1,
     sample_size: int = 10000,
     use_transforms: bool = True,
+    loss: str = "vanilla",
+    lambda_gp: float = 10,
 ):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -63,6 +65,8 @@ def train(
             ndf=ndf,
             label_smoothing=label_smoothing,
             label_smoothing_factor=label_smoothing_factor,
+            loss=loss,
+            lambda_gp=lambda_gp,
         )
     else:
         pix2pix_model = DEM_Pix2Pix(
@@ -73,6 +77,8 @@ def train(
             ndf=ndf,
             label_smoothing=label_smoothing,
             label_smoothing_factor=label_smoothing_factor,
+            loss=loss,
+            lambda_gp=lambda_gp,
         )
 
     # Initialize the weights to have mean 0 and standard deviation 0.02
@@ -133,7 +139,10 @@ def train(
             loss_history["D_real_loss"].append(d_real_loss)
             loss_history["D_fake_loss"].append(d_fake_loss)
             loss_history["G_loss"].append(g_loss)
-            loss_history["G_bce_loss"].append(g_bce_loss)
+
+            if g_bce_loss is not None:
+                loss_history["G_bce_loss"].append(g_bce_loss)
+
             loss_history["G_l1_loss"].append(g_l1_loss)
 
         with torch.no_grad():
@@ -223,6 +232,9 @@ if __name__ == "__main__":
     parser.add_argument("--use-transforms", action="store_true")
     parser.add_argument("--label-smoothing-factor", type=float, default=0.2)
     parser.add_argument("--sample-size", type=int, default=4000)
+    parser.add_argument("--wandb-project", type=str, required=True)
+    parser.add_argument("--loss", choices=["vanilla", "wgangp"], default="vanilla")
+    parser.add_argument("--lambda-gp", type=float, default=10.0)
     args = parser.parse_args()
 
     if args.pretrained_generator is not None:
@@ -235,7 +247,7 @@ if __name__ == "__main__":
     else:
         pretrained_discriminator_path = None
 
-    wandb.init(project="myprojects", config=args)
+    wandb.init(project=args.wandb_project, config=args)
 
     # Start training
     train(
@@ -253,6 +265,8 @@ if __name__ == "__main__":
         label_smoothing_factor=args.label_smoothing_factor,
         sample_size=args.sample_size,
         use_transforms=args.use_transforms,
+        loss=args.loss,
+        lambda_gp=args.lambda_gp,
     )
 
     wandb.finish()
