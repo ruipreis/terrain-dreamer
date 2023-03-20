@@ -12,7 +12,7 @@ class WSConv2d(nn.Module):
     ):
         super(WSConv2d, self).__init__()
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding)
-        self.scale = (gain / (in_channels * (kernel_size**2))) ** 0.5
+        self.scale = (gain / (in_channels * (kernel_size ** 2))) ** 0.5
         self.bias = self.conv.bias
         self.conv.bias = None
 
@@ -31,7 +31,7 @@ class PixelNorm(nn.Module):
         self.epsilon = 1e-8
 
     def forward(self, x):
-        return x / torch.sqrt(torch.mean(x**2, dim=1, keepdim=True) + self.epsilon)
+        return x / torch.sqrt(torch.mean(x ** 2, dim=1, keepdim=True) + self.epsilon)
 
 
 # Regular Convolution Block with Pixel Normalization
@@ -106,8 +106,16 @@ class Generator(nn.Module):
         # apply fade in layers
         return self.fade_in(alpha, up_route, out_route)
 
+    def set_requires_grad(self, requires_grad):
+        for param in self.parameters():
+            param.requires_grad = requires_grad
+
 
 class Discriminator(nn.Module):
+    def set_requires_grad(self, requires_grad):
+        for param in self.parameters():
+            param.requires_grad = requires_grad
+
     def __init__(self, in_channels, img_channels=3):
         super(Discriminator, self).__init__()
 

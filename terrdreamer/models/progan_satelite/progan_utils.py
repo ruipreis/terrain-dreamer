@@ -4,20 +4,39 @@ import torchvision
 import progan_config
 
 
-def plot_to_tensorboard(writer, loss_critic, loss_gen, real, fake, tensorboard_step):
-    writer.add_scalar("Loss Discriminator", loss_critic, global_step=tensorboard_step)
+import wandb
 
-    with torch.no_grad():
+
+def log_to_wandb(latent_size, loss_critic, loss_gen, real, fake, wandb_step):
+    image_size_flag = f"{latent_size}x{latent_size}"
+
+    wandb.log(
+        {
+            f"Loss Discriminator ({image_size_flag})": loss_critic,
+            f"Loss Generator ({image_size_flag})": loss_gen,
+        },
+        step=wandb_step,
+    )
+
+    if wandb_step % 10 == 0:
         # take out (up to) 8 examples to plot
-        img_grid_real = torchvision.utils.make_grid(real[:8], normalize=True)
-        img_grid_fake = torchvision.utils.make_grid(fake[:8], normalize=True)
-        writer.add_image("Real", img_grid_real, global_step=tensorboard_step)
-        writer.add_image("Fake", img_grid_fake, global_step=tensorboard_step)
+        img_grid_real = torchvision.utils.make_grid(real[:6], normalize=True)
+        img_grid_fake = torchvision.utils.make_grid(fake[:6], normalize=True)
+        wandb.log(
+            {
+                f"Real ({image_size_flag})": [
+                    wandb.Image(img_grid_real, caption="Real")
+                ],
+                f"Fake ({image_size_flag})": [
+                    wandb.Image(img_grid_fake, caption="Fake")
+                ],
+            },
+            step=wandb_step,
+        )
 
 
 def gradient_penalty(critic, real, fake, alpha, train_step, device="cpu"):
-    BATCH_SIZE, C, H, W = real.shape
-    beta = torch.rand((BATCH_SIZE, 1, 1, 1)).repeat(1, C, H, W).to(device)
+    beta = torch.rand((real.size(0), 1, 1, 1)).to(device)
     interpolated_images = real * beta + fake.detach() * (1 - beta)
     interpolated_images.requires_grad_(True)
 

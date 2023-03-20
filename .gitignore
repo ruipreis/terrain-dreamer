@@ -142,3 +142,5 @@ dataset_aw3d30
 *.pt
 *.jpg
 logs
+wandb
+*.pth
