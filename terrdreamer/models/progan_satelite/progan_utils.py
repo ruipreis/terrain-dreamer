@@ -12,8 +12,8 @@ def log_to_wandb(latent_size, loss_critic, loss_gen, real, fake, wandb_step):
 
     wandb.log(
         {
-            f"Loss Discriminator ({image_size_flag})": loss_critic,
-            f"Loss Generator ({image_size_flag})": loss_gen,
+            f"Loss Discriminator": loss_critic,
+            f"Loss Generator": loss_gen,
         },
         step=wandb_step,
     )
@@ -24,12 +24,8 @@ def log_to_wandb(latent_size, loss_critic, loss_gen, real, fake, wandb_step):
         img_grid_fake = torchvision.utils.make_grid(fake[:6], normalize=True)
         wandb.log(
             {
-                f"Real ({image_size_flag})": [
-                    wandb.Image(img_grid_real, caption="Real")
-                ],
-                f"Fake ({image_size_flag})": [
-                    wandb.Image(img_grid_fake, caption="Fake")
-                ],
+                f"Real": [wandb.Image(img_grid_real, caption=f"Real ({image_size_flag})")],
+                f"Fake": [wandb.Image(img_grid_fake, caption=f"Fake ({image_size_flag})")],
             },
             step=wandb_step,
         )
