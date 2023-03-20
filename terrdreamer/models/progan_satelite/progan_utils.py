@@ -6,6 +6,7 @@ import progan_config
 
 def plot_to_tensorboard(writer, loss_critic, loss_gen, real, fake, tensorboard_step):
     writer.add_scalar("Loss Discriminator", loss_critic, global_step=tensorboard_step)
+    writer.add_scalar("Loss Generator", loss_gen, global_step=tensorboard_step)
 
     with torch.no_grad():
         # take out (up to) 8 examples to plot
@@ -15,9 +16,9 @@ def plot_to_tensorboard(writer, loss_critic, loss_gen, real, fake, tensorboard_s
         writer.add_image("Fake", img_grid_fake, global_step=tensorboard_step)
 
 
-def gradient_penalty(critic, real, fake, alpha, train_step, device="cpu"):
+def gradient_penalty(critic, real, fake, alpha, train_step, curr_batch_size, device="cpu"):
     BATCH_SIZE, C, H, W = real.shape
-    beta = torch.rand((BATCH_SIZE, 1, 1, 1)).repeat(1, C, H, W).to(device)
+    beta = torch.rand((curr_batch_size, 1, 1, 1)).repeat(1, C, H, W).to(device)
     interpolated_images = real * beta + fake.detach() * (1 - beta)
     interpolated_images.requires_grad_(True)
 

@@ -11,7 +11,7 @@ from tqdm import tqdm
 
 # Load configs & utils
 import progan_config
-from progan_utils import gradient_penalty, save_checkpoint, plot_to_tensorboard
+from progan_utils import gradient_penalty, save_checkpoint, plot_to_tensorboard, load_checkpoint
 from torch.utils.tensorboard import SummaryWriter
 from math import log2
 
@@ -32,6 +32,7 @@ def trainer(
     tensorboard_step,
     writer,
     curr_image_size,
+    curr_batch_size,
 ):
 
     for i, (real, _) in tqdm(enumerate(aw3d30_loader), total=len(aw3d30_loader)):
@@ -43,16 +44,22 @@ def trainer(
 
         # Train Discriminator: max E[discriminator(real)] - E[discriminator(fake)] <-> min -E[discriminator(real)] + E[discriminator(fake)]
         # which is equivalent to minimizing the negative of the expression
-        noise = torch.randn(
-            progan_config.BATCH_SIZE, progan_config.LATENT_SIZE, 1, 1
-        ).to(progan_config.DEVICE)
+        noise = torch.randn(curr_batch_size, progan_config.LATENT_SIZE, 1, 1).to(
+            progan_config.DEVICE
+        )
 
         with torch.cuda.amp.autocast():
             fake = generator(noise, alpha, step)
             discriminator_real = discriminator(real, alpha, step)
             discriminator_fake = discriminator(fake.detach(), alpha, step)
             gp = gradient_penalty(
-                discriminator, real, fake, alpha, step, device=progan_config.DEVICE
+                discriminator,
+                real,
+                fake,
+                alpha,
+                step,
+                curr_batch_size=curr_batch_size,
+                device=progan_config.DEVICE,
             )
             loss_discriminator = (
                 -(torch.mean(discriminator_real) - torch.mean(discriminator_fake))
@@ -76,8 +83,8 @@ def trainer(
         generator_scaler.update()
 
         # Update alpha and ensure less than 1
-        alpha += progan_config.BATCH_SIZE / (
-            (progan_config.PROGRESSIVE_EPOCHS[step] * 0.5) * len(aw3d30_loader) * 50
+        alpha += curr_batch_size / (
+            (progan_config.PROGRESSIVE_EPOCHS[step] * 0.5) * len(aw3d30_loader)
         )
         alpha = min(alpha, 1)
 
@@ -122,6 +129,20 @@ def main():
     # Launch Tensorboard
     writer = SummaryWriter(f"logs/gan1")
 
+    if progan_config.LOAD_MODEL:
+        load_checkpoint(
+            progan_config.CHECKPOINT_GENERATOR,
+            generator,
+            generator_optimizer,
+            progan_config.LEARNING_RATE,
+        )
+        load_checkpoint(
+            progan_config.CHECKPOINT_DISCRIMINATOR,
+            discriminator,
+            discriminator_optimizer,
+            progan_config.LEARNING_RATE,
+        )
+
     generator.train()
     discriminator.train()
     tensorboard_step = 0
@@ -134,6 +155,7 @@ def main():
         curr_image_size = 4 * 2**step
         print(f"Current image size: {curr_image_size}")
 
+        curr_batch_size = progan_config.BATCH_SIZE
         # Load the dataset
         aw3d30_loader = torch.utils.data.DataLoader(
             AW3D30Dataset(
@@ -143,7 +165,7 @@ def main():
                 for_progan=True,
                 new_size=curr_image_size,
             ),
-            progan_config.BATCH_SIZE,
+            batch_size=curr_batch_size,
             shuffle=True,
         )
 
@@ -162,6 +184,7 @@ def main():
                 tensorboard_step,
                 writer,
                 curr_image_size,
+                curr_batch_size,
             )
 
             # Save the models
@@ -171,7 +194,7 @@ def main():
             save_checkpoint(
                 discriminator,
                 discriminator_optimizer,
-                progan_config.CHECKPOINT_GENERATOR,
+                progan_config.CHECKPOINT_DISCRIMINATOR,
             )
 
         step += 1
