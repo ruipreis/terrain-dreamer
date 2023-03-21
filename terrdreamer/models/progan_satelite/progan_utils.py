@@ -7,28 +7,31 @@ import progan_config
 import wandb
 
 
-def log_to_wandb(latent_size, loss_critic, loss_gen, real, fake, wandb_step):
-    image_size_flag = f"{latent_size}x{latent_size}"
-
-    wandb.log(
-        {
-            f"Loss Discriminator": loss_critic,
-            f"Loss Generator": loss_gen,
-        },
-        step=wandb_step,
-    )
+def log_to_wandb(latent_size, loss_critic, loss_gen, real, fake, wandb_step, dem: bool):
+    log_message = {
+        f"Loss Discriminator": loss_critic,
+        f"Loss Generator": loss_gen,
+        f"Latent Size": latent_size,
+    }
 
     if wandb_step % 10 == 0:
-        # take out (up to) 8 examples to plot
-        img_grid_real = torchvision.utils.make_grid(real[:6], normalize=True)
-        img_grid_fake = torchvision.utils.make_grid(fake[:6], normalize=True)
-        wandb.log(
-            {
-                f"Real": [wandb.Image(img_grid_real, caption=f"Real ({image_size_flag})")],
-                f"Fake": [wandb.Image(img_grid_fake, caption=f"Fake ({image_size_flag})")],
-            },
-            step=wandb_step,
-        )
+        if dem:
+            # In case of DEM, then there's the need to call the to_gtif method
+            img_grid_real = torchvision.utils.make_grid(
+                real[:6], normalize=True, value_range=(-1, 1)
+            )
+            img_grid_fake = torchvision.utils.make_grid(
+                fake[:6], normalize=True, value_range=(-1, 1)
+            )
+        else:
+            # take out (up to) 8 examples to plot
+            img_grid_real = torchvision.utils.make_grid(real[:6], normalize=True)
+            img_grid_fake = torchvision.utils.make_grid(fake[:6], normalize=True)
+
+        log_message["Real"] = [wandb.Image(img_grid_real)]
+        log_message["Fake"] = [wandb.Image(img_grid_fake)]
+
+    wandb.log(log_message)
 
 
 def gradient_penalty(critic, real, fake, alpha, train_step, device="cpu"):
