@@ -107,8 +107,16 @@ class Generator(nn.Module):
         # apply fade in layers
         return self.fade_in(alpha, up_route, out_route)
 
+    def set_requires_grad(self, requires_grad):
+        for param in self.parameters():
+            param.requires_grad = requires_grad
+
 
 class Discriminator(nn.Module):
+    def set_requires_grad(self, requires_grad):
+        for param in self.parameters():
+            param.requires_grad = requires_grad
+
     def __init__(self, in_channels, img_channels=3):
         super(Discriminator, self).__init__()
 

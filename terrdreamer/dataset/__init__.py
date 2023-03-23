@@ -1,42 +1,13 @@
 import random
-from pathlib import Path
-
-import numpy as np
-import torch
-import torchvision.transforms.functional as TF
+from torchvision.transforms import transforms
 from PIL import Image
+import numpy as np
+from pathlib import Path
 from torch.utils.data import Dataset
-from torchvision import transforms
-from tqdm import tqdm
+import torch
 
-LAMBDA = 100
-
-
-# In this case we need to perform segmentation on the image, thus we need to use
-# functional torchvision transforms - to perform the same transform on the
-# segmentation mask
-def my_transforms(image, mask):
-    # Random horizontal flipping
-    if random.random() > 0.5:
-        image = TF.hflip(image)
-        mask = TF.hflip(mask)
-
-    # Random vertical flipping
-    if random.random() > 0.5:
-        image = TF.vflip(image)
-        mask = TF.vflip(mask)
-
-    # Random perform a random resized crop, the inputs are 256x256, the
-    # resize is performed to 286x286, then a random crop of 256x256 is
-    # performed
-    if random.random() > 0.5:
-        i, j, h, w = transforms.RandomResizedCrop.get_params(
-            image, scale=(0.8, 1.0), ratio=(1.0, 1.0)
-        )
-        image = TF.resized_crop(image, i, j, h, w, (256, 256))
-        mask = TF.resized_crop(mask, i, j, h, w, (256, 256))
-
-    return image, mask
+DEM_MIN_ELEVATION = -82
+DEM_MAX_ELEVATION = 7219
 
 
 def tiff_to_jpg(tiff_data, convert: bool = False, out_path=None):
@@ -62,10 +33,6 @@ def tiff_to_jpg(tiff_data, convert: bool = False, out_path=None):
     return img
 
 
-DEM_MIN_ELEVATION = -82
-DEM_MAX_ELEVATION = 7219
-
-
 class AW3D30Dataset(Dataset):
     def __init__(
         self,
@@ -73,7 +40,8 @@ class AW3D30Dataset(Dataset):
         limit=None,
         normalize: bool = True,
         swap: bool = False,
-        transforms=False,
+        for_progan=False,
+        new_size=None,
     ):
         self._available_files = list(path.glob("*.npz"))
 
@@ -82,11 +50,45 @@ class AW3D30Dataset(Dataset):
 
         self._normalize = normalize
         self._swap = swap
+        self._forprogan = for_progan
+        self._newsize = new_size
 
-        if transforms:
-            self._transforms = my_transforms
-        else:
-            self._transforms = None
+        if self._newsize is not None:
+            self._transform = self._derive_transform(self._newsize)
+            self._gtif_transform = self._derive_gtif_transform(self._newsize)
+
+    def _derive_transform(self, newsize):
+        transform = transforms.Compose(
+            [
+                transforms.ToPILImage(),
+                transforms.Resize(newsize),
+                transforms.ToTensor(),
+                transforms.RandomHorizontalFlip(),
+                transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
+            ]
+        )
+
+        return transform
+
+    def _derive_gtif_transform(self, newsize):
+        transform = transforms.Compose(
+            [
+                transforms.ToTensor(),
+                transforms.Resize(newsize),
+            ]
+        )
+
+        return transform
+
+    @property
+    def newsize(self):
+        return self._newsize
+
+    @newsize.setter
+    def newsize(self, newsize):
+        self._newsize = newsize
+        self._transform = self._derive_transform(self._newsize)
+        self._gtif_transform = self._derive_gtif_transform(self._newsize)
 
     def __len__(self):
         return len(self._available_files)
@@ -94,21 +96,30 @@ class AW3D30Dataset(Dataset):
     def __getitem__(self, idx):
         data = np.load(self._available_files[idx])
 
-        gtif = torch.tensor(data["GTIF"], dtype=torch.float32)
-        sat = torch.tensor(data["SAT"], dtype=torch.float32)
+        if self._forprogan:
+            gtif = torch.tensor(data["GTIF"], dtype=torch.float32)
 
-        # Make sure gtif and sat is shaped correctly
-        gtif = gtif.unsqueeze(0)
+            sat = self._transform(data["SAT"])
+            gtif = self._gtif_transform(data["GTIF"])
 
-        sat = sat.permute(2, 0, 1)
-
-        if self._normalize:
-            sat = (sat / 127.5) - 1
+            # Normalize the inputs
             gtif = (gtif - DEM_MIN_ELEVATION) / (DEM_MAX_ELEVATION - DEM_MIN_ELEVATION)
             gtif = gtif * 2 - 1
+        else:
+            gtif = torch.tensor(data["GTIF"], dtype=torch.float32)
+            sat = torch.tensor(data["SAT"], dtype=torch.float32)
 
-        if self._transforms is not None:
-            sat, gtif = self._transforms(sat, gtif)
+            # Make sure gtif and sat is shaped correctly
+            gtif = gtif.unsqueeze(0)
+
+            sat = sat.permute(2, 0, 1)
+
+            if self._normalize:
+                sat = (sat / 127.5) - 1
+                gtif = (gtif - DEM_MIN_ELEVATION) / (
+                    DEM_MAX_ELEVATION - DEM_MIN_ELEVATION
+                )
+                gtif = gtif * 2 - 1
 
         if self._swap:
             return gtif, sat

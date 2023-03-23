@@ -1,23 +1,38 @@
-import progan_config
 import torch
-import torch.nn as nn
 import torchvision
 
+import wandb
 
-def plot_to_tensorboard(writer, loss_critic, loss_gen, real, fake, tensorboard_step):
-    writer.add_scalar("Loss Discriminator", loss_critic, global_step=tensorboard_step)
 
-    with torch.no_grad():
-        # take out (up to) 8 examples to plot
-        img_grid_real = torchvision.utils.make_grid(real[:8], normalize=True)
-        img_grid_fake = torchvision.utils.make_grid(fake[:8], normalize=True)
-        writer.add_image("Real", img_grid_real, global_step=tensorboard_step)
-        writer.add_image("Fake", img_grid_fake, global_step=tensorboard_step)
+def log_to_wandb(latent_size, loss_critic, loss_gen, real, fake, wandb_step, dem: bool):
+    log_message = {
+        f"Loss Discriminator": loss_critic,
+        f"Loss Generator": loss_gen,
+        f"Latent Size": latent_size,
+    }
+
+    if wandb_step % 10 == 0:
+        if dem:
+            # In case of DEM, then there's the need to call the to_gtif method
+            img_grid_real = torchvision.utils.make_grid(
+                real[:6], normalize=True, value_range=(-1, 1)
+            )
+            img_grid_fake = torchvision.utils.make_grid(
+                fake[:6], normalize=True, value_range=(-1, 1)
+            )
+        else:
+            # take out (up to) 8 examples to plot
+            img_grid_real = torchvision.utils.make_grid(real[:6], normalize=True)
+            img_grid_fake = torchvision.utils.make_grid(fake[:6], normalize=True)
+
+        log_message["Real"] = [wandb.Image(img_grid_real)]
+        log_message["Fake"] = [wandb.Image(img_grid_fake)]
+
+    wandb.log(log_message)
 
 
 def gradient_penalty(critic, real, fake, alpha, train_step, device="cpu"):
-    BATCH_SIZE, C, H, W = real.shape
-    beta = torch.rand((BATCH_SIZE, 1, 1, 1)).repeat(1, C, H, W).to(device)
+    beta = torch.rand((real.size(0), 1, 1, 1)).to(device)
     interpolated_images = real * beta + fake.detach() * (1 - beta)
     interpolated_images.requires_grad_(True)
 
