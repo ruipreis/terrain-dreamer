@@ -1,13 +1,11 @@
 import argparse
 import wandb
 from typing import List
-from math import log2
 import torch
 from terrdreamer.dataset import AW3D30Dataset
 from tqdm import tqdm
 from terrdreamer.models.progan_satelite.progan_utils import (
     log_to_wandb,
-    save_checkpoint,
     gradient_penalty,
 )
 from terrdreamer.models.progan_satelite.progan import Generator, Discriminator

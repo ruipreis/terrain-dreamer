@@ -1,8 +1,5 @@
 import torch
-import torch.nn as nn
 import torchvision
-import progan_config
-
 
 import wandb
 
