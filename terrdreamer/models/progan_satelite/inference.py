@@ -1,6 +1,7 @@
-from terrdreamer.models.progan_satelite.progan import Generator
 import torch
 import torchvision
+
+from terrdreamer.models.progan_satelite.progan import Generator
 
 
 def load_generator(checkpoint_path, device, latent_dim, n_channels):

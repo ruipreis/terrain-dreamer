@@ -1,10 +1,11 @@
 import random
-from torchvision.transforms import transforms
-from PIL import Image
-import numpy as np
 from pathlib import Path
-from torch.utils.data import Dataset
+
+import numpy as np
 import torch
+from PIL import Image
+from torch.utils.data import Dataset
+from torchvision.transforms import transforms
 
 DEM_MIN_ELEVATION = -82
 DEM_MAX_ELEVATION = 7219

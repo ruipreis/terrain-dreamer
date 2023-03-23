@@ -1,10 +1,12 @@
 import argparse
 from pathlib import Path
+
+import numpy as np
 import torch
 from PIL import Image
-from terrdreamer.models.image_to_dem import DEM_Pix2Pix
+
 from terrdreamer.dataset import tiff_to_jpg
-import numpy as np
+from terrdreamer.models.image_to_dem import DEM_Pix2Pix
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
