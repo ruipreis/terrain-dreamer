@@ -9,9 +9,8 @@ with open("requirements.txt", "r") as fr:
 setuptools.setup(
     name="terrdreamer",
     version="0.0.0",
-    author="Rui Reis.",
-    author_email="rui.reis@dotmoovs.com",
-    description="3D Terrain Generator",
+    author="Rui Reis, Diogo Monteiro, Filipe Fernandes",
+    description="Terrdreamer is a Python package for fast, realistic 3D terrain generation using generative models, DEMs, and RGB satellite imagery. Ideal for researchers, game developers, and GIS professionals, it supports GPU acceleration. Unleash your creativity with terrdreamer!",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/ruipreis/terrain-dreamer",
