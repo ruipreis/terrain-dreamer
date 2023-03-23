@@ -1,17 +1,47 @@
-from pathlib import Path
 import argparse
 import random
-from PIL import Image
-import rasterio
-import numpy as np
-import zipfile
 import tempfile
-import ray
-from ray.util.queue import Queue
+import zipfile
+from pathlib import Path
 
-def prepare_dataset(sat_folder: Path, gtif_folder: Path, zip_file: Path):
-    @ray.remote
-    def _read_sat_and_gtif(q:Queue, sat_file: Path, gtif_file: Path):
+import numpy as np
+import rasterio
+import ray
+from PIL import Image
+from ray.util.queue import Queue
+from tqdm import tqdm
+
+MIN_ELEVATION = -283
+MAX_ELEVATION = 7943
+
+
+def _find_bounds(sat_folder: Path, gtif_folder: Path):
+    # Only considers gtif files that have a match sat file
+    sat_files = [x.stem for x in list(sat_folder.glob("*.jpg"))]
+
+    # Open all the gTIF files and find the min and max elevation
+    min_elevation = float("inf")
+    max_elevation = -float("inf")
+
+    for sat_id in tqdm(sat_files):
+        gtif_file = gtif_folder / f"{sat_id}.tif"
+
+        with rasterio.open(gtif_file) as src:
+            gtif_data = np.array(src.read(1))
+
+            # Only consider if 50% of the pixels are above sea level
+            if ((gtif_data <= 0).sum() / gtif_data.size) > 0.5:
+                print("Found invalid gTIF file: ", gtif_file)
+                continue
+
+            min_elevation = min(min_elevation, gtif_data.min())
+            max_elevation = max(max_elevation, gtif_data.max())
+
+    return min_elevation, max_elevation
+
+
+def prepare_dataset(sat_folder: Path, gtif_folder: Path, out_path: Path):
+    def _read_sat_and_gtif(sat_file: Path, gtif_file: Path):
         # For each satellite image, we need to know the width and height
         # we'll keep only the images that are 512x512
         with Image.open(sat_file) as img:
@@ -33,32 +63,14 @@ def prepare_dataset(sat_folder: Path, gtif_folder: Path, zip_file: Path):
                 sat_patch = sat_img[i : i + 256, j : j + 256]
                 gtif_patch = gtif_data[i : i + 256, j : j + 256]
 
-                # We'll save the patches in a dictionary
-                # The key will be the patch name
-                # The value will be a tuple of the satellite image and the gTIF data
-                q.put((f"{sat_file.stem}_{i}_{j}", sat_patch, gtif_patch))
+                # Need to validate the gTIF patch before sending to writer thread,
+                # to be a part of the dataset atleast 50% of the pixels must be above sea level
+                if ((gtif_patch <= 0).sum() / gtif_patch.size) > 0.5:
+                    continue
 
-    @ray.remote
-    def _write_to_zip(q:Queue, zip_file: Path):
-        with zipfile.ZipFile(zip_file, "w") as zip:
-            while True:
-                x = q.get()
-
-                if x is None:
-                    break
-                else:
-                    patch_name, sat_patch, gtif_patch = x
-
-
-                info = {
-                    "SAT": sat_patch,
-                    "GTIF": gtif_patch,
-                }
-
-                tmp_npz = tempfile.NamedTemporaryFile(suffix=".npz")
-                np.savez(tmp_npz, **info)
-                zip.write(tmp_npz.name, arcname=f"{patch_name}.npz")
-                tmp_npz.close()
+                # Now simply write the patches to the output folder
+                out_file = out_path / f"{sat_file.stem}_{i}_{j}.npz"
+                np.savez(out_file, SAT=sat_patch, GTIF=gtif_patch)
 
     # List all the satellite images
     sat_files = list(sat_folder.glob("*.jpg"))
@@ -68,29 +80,21 @@ def prepare_dataset(sat_folder: Path, gtif_folder: Path, zip_file: Path):
         (sat_file, gtif_folder / f"{sat_file.stem}.tif") for sat_file in sat_files
     ]
 
-    q = Queue()
-
-    # Launch a thread to write to the zip file
-    write_to_zip = _write_to_zip.remote(q, zip_file)
-
-    # Launch a thread for each satellite image
-    write_refs = [_read_sat_and_gtif.remote(q, sat_file, gtif_file) for sat_file, gtif_file in sat_gtif_pairs]
-
-    # Wait for all the threads to finish
-    ray.get(write_refs)
-
-    # Signal the writing thread to finish
-    q.put(None)
-
-    # Wait for the writing thread to finish
-    ray.get(write_to_zip)
+    for sat_file, gtif_file in tqdm(sat_gtif_pairs):
+        _read_sat_and_gtif(sat_file, gtif_file)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--sat-folder", type=Path, required=True)
     parser.add_argument("--gtif-folder", type=Path, required=True)
-    parser.add_argument("--zip-file", type=Path, required=True)
+    parser.add_argument("--out-path", type=Path, required=True)
+    parser.add_argument("--find-bounds", action="store_true")
     args = parser.parse_args()
 
-    prepare_dataset(args.sat_folder, args.gtif_folder, args.zip_file)
+    if args.find_bounds:
+        min_value, max_value = _find_bounds(args.sat_folder, args.gtif_folder)
+        print("Min elevation: ", min_value)
+        print("Max elevation: ", max_value)
+    else:
+        prepare_dataset(args.sat_folder, args.gtif_folder, args.out_path)

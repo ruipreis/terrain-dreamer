@@ -1,14 +1,12 @@
+import os
 import re
 import zipfile
+from multiprocessing import Pool
 from pathlib import Path
 from typing import List
 
-from tqdm.contrib.concurrent import process_map
-
-import os
-from multiprocessing import Pool
-
 import requests
+from tqdm.contrib.concurrent import process_map
 
 
 def download_file(sample, folder):
@@ -32,6 +30,7 @@ def download_file(sample, folder):
 def download(ls, folder):
     with Pool() as p:
         p.starmap(download_file, [(sample, folder) for sample in ls])
+
 
 def _derive_subtiles(src_direction: str, dest_direction: str, degree_step: int):
     src_orientation = src_direction[0]

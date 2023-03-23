@@ -1,15 +1,17 @@
 import argparse
-import wandb
-from typing import List
-import torch
-from terrdreamer.dataset import AW3D30Dataset
-from tqdm import tqdm
-from terrdreamer.models.progan_satelite.progan_utils import (
-    log_to_wandb,
-    gradient_penalty,
-)
-from terrdreamer.models.progan_satelite.progan import Generator, Discriminator
 from pathlib import Path
+from typing import List
+
+import torch
+from tqdm import tqdm
+
+import wandb
+from terrdreamer.dataset import AW3D30Dataset
+from terrdreamer.models.progan_satelite.progan import Discriminator, Generator
+from terrdreamer.models.progan_satelite.progan_utils import (
+    gradient_penalty,
+    log_to_wandb,
+)
 
 
 def trainer(
