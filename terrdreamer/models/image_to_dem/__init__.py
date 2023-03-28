@@ -107,7 +107,7 @@ class DEM_Pix2Pix:
 
         return loss.item(), real_loss.item(), fake_loss.item()
 
-    def step_generator(self, x, y, optimizer):
+    def step_generator(self, x, y, optimizer, *args):
         fakeY = self.generator(x)
         fake_AB = self.discriminator(x, fakeY)
 
@@ -118,7 +118,7 @@ class DEM_Pix2Pix:
             bce_loss = self.bce_loss(fake_AB, torch.ones_like(fake_AB))
             loss = bce_loss
 
-        l1_loss = self.l1_loss(fakeY, y) * self.l1_lambda
+        l1_loss = self.l1_loss(fakeY, y, *args) * self.l1_lambda
         loss += l1_loss
 
         loss.backward()
@@ -130,7 +130,7 @@ class DEM_Pix2Pix:
             l1_loss.item(),
         )
 
-    def test(self, x, y):
+    def test(self, x, y, *args):
         fakeY = self.generator(x)
         fake_AB = self.discriminator(x, fakeY)
         real_AB = self.discriminator(x, y)
@@ -144,7 +144,7 @@ class DEM_Pix2Pix:
             )
             G_loss = self.bce_loss(fake_AB, torch.ones_like(fake_AB))
 
-        G_loss = G_loss + self.l1_loss(fakeY, y) * self.l1_lambda
+        G_loss = G_loss + self.l1_loss(fakeY, y, *args) * self.l1_lambda
 
         return fakeY, D_loss, G_loss
 

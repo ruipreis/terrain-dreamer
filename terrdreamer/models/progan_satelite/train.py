@@ -62,7 +62,7 @@ def trainer(
         loss_discriminator = (
             -(torch.mean(discriminator_real) - torch.mean(discriminator_fake))
             + lambda_gp * gp
-            + (0.001 * torch.mean(discriminator_real ** 2))
+            + (0.001 * torch.mean(discriminator_real**2))
         )
 
         loss_discriminator.backward()
@@ -160,7 +160,7 @@ def train(
 
     for idx, num_epochs in enumerate(progressive_epochs[step:]):
         alpha = 1e-5
-        curr_image_size = 4 * (2 ** step)
+        curr_image_size = 4 * (2**step)
         print(f"Current image size: {curr_image_size}")
 
         # Set the new size for the dataset
