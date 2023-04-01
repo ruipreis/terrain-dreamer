@@ -1,37 +1,39 @@
 import torch
 import torch.nn as nn
-from terrdreamer.models.image_to_dem import DEM_Pix2Pix
 
+from terrdreamer.models.infinity_grid.layers import EncoderDecoderNetwork
 
-# Masked pix2pix uses a masked l1 loss
-class MaskedL1Loss(nn.Module):
-    def __init__(self):
-        super(MaskedL1Loss, self).__init__()
+class DeepFillv1(nn.Module):
+    # This is based on the following paper:
+    # https://arxiv.org/abs/1801.07892
+    #
+    # Which includes the following general structure:
+    # 1. Coarse network
+    # 2. Refinement network
+    # 3. Local Discriminator
+    # 4. Global Discriminator
+    # 5. Use of contextual attention
 
-    def forward(self, input, target, mask):
-        # Calculate the L1 loss in the masked region
-        loss = torch.abs(input - target) * (mask / 2 + 0.5)
-        loss = torch.mean(loss)
-
-        return loss
-
-
-class Masked_Pix2Pix(DEM_Pix2Pix):
     def __init__(
         self,
-        lambda_l1=100,
-        ngf: int = 64,
-        ndf: int = 64,
-        lambda_gp: float = 10,
+        in_channels: int = 3,
+        out_channels: int = 3,
     ):
-        super().__init__(
-            4,
-            3,
-            lambda_l1=lambda_l1,
-            ngf=ngf,
-            ndf=ndf,
-            loss="wgangp",
-            lambda_gp=lambda_gp,
+        self.coarse_network = EncoderDecoderNetwork(
+            in_channels=in_channels+1+1, # 1 for mask, 1 for depth
+            out_channels=out_channels,
         )
+        
+    def forward(self, x, mask):
+        # Keep a variable referencing the original image
+        xin = x
+        
+        # Concatenate the mask and the image
+        B, _, H, W = x.shape
+        x_ones = torch.ones(B, 1, H, W)
+        x = torch.cat([x, x_ones, x_ones * mask], dim=1)
 
-        self.l1_loss = MaskedL1Loss()
+        x = self.coarse_network(x)
+        
+        return
+        
