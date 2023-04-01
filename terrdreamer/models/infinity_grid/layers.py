@@ -111,75 +111,161 @@ class EncodingConvolutionalPath(nn.Module):
         return c_x, x
 
 
+def cosine_similarity_efficient(tensor_a, tensor_b):
+    B, N, H, W, M1 = tensor_a.shape
+    _, _, _, _, M2 = tensor_b.shape
+
+    # Reshape the tensors so that each 3x3 matrix is treated as a vector
+    tensor_a_flat = tensor_a.view(B, N, H * W, M1)
+    tensor_b_flat = tensor_b.view(B, N, H * W, M2)
+
+    # Compute norms
+    tensor_a_norm = torch.norm(tensor_a_flat, dim=2, keepdim=True)
+    tensor_b_norm = torch.norm(tensor_b_flat, dim=2, keepdim=True)
+
+    # Normalize the tensors
+    tensor_a_normalized = tensor_a_flat / tensor_a_norm
+    tensor_b_normalized = tensor_b_flat / tensor_b_norm
+
+    # Compute cosine similarity
+    cosine_similarity_map = torch.matmul(
+        tensor_a_normalized.transpose(2, 3), tensor_b_normalized
+    )
+
+    return cosine_similarity_map
+
+
+def normalize_factor(wi):
+    B, N, _, _, _ = wi.shape
+
+    # Calculate L2 norm along dimensions 0, 1, and 2
+    l2_norm = torch.sqrt(torch.sum(wi**2, dim=[2, 3, 4]))
+
+    # Compute the element-wise maximum between the L2 norm tensor and the scalar value 1e-4
+    result = torch.maximum(l2_norm, torch.tensor(1e-4))
+
+    return result.reshape(B, N, 1, 1, 1)
+
+
 class ContextualAttention(nn.Module):
-    def __init__(self, patch_size=3, lambda_value=10.0, rate: float = 2.0):
+    def __init__(self, lambda_value=10.0, rate: float = 2.0):
         super(ContextualAttention, self).__init__()
-        self.patch_size = patch_size
+        self.patch_size = 3
         self.lambda_value = lambda_value
-        self.rate = rate
 
-    def forward(self, foreground, background, mask=None):
-        # Resize the rate of foreground, background and mask
-        foreground = F.interpolate(
-            foreground, scale_factor=1 / self.rate, mode="nearest"
+    def extract_mask(self, mask):
+        B, _, H, W = mask.shape
+
+        mask_patches = self.to_patches(mask)
+
+        mask_patches = mask_patches.mean(dim=(1, 2, 3), keepdim=True)
+
+        # Compare the mask with zero and convert back to float
+        mask_patches = (mask_patches != 0).float()
+
+        mask_patches = mask_patches.view(B, H * W, 1, 1)
+
+        return mask_patches
+
+    def to_patches(self, x):
+        B, N, _, _ = x.shape
+
+        # Extract all patches using F.unfold
+        patches = F.unfold(x, kernel_size=self.patch_size, padding=1)
+        patches = patches.view(B, N, self.patch_size, self.patch_size, -1)
+
+        return patches
+        # # Extract mask patches
+        # mask_patches = F.unfold(mask, kernel_size=self.patch_size, padding=1)
+        # mask_patches = mask_patches.view(B, 1, self.patch_size, self.patch_size, -1)
+
+        # # Create a binary mask indicating which patches contain only background pixels
+        # background_mask = (mask_patches == 0).all(dim=1).all(dim=1).all(dim=1)
+
+        # # Select the patches that correspond to the background only
+        # background_patches = patches.permute(0, 4, 1, 2, 3)
+        # background_patches = background_patches[background_mask]
+
+        # background_patches = background_patches.view(
+        #     B, N, self.patch_size, self.patch_size, -1
+        # )
+
+        # return background_patches
+
+    def to_filters(self, x):
+        return x.permute(0, 4, 1, 2, 3).contiguous()
+
+    def apply_conv_kernels(self, foreground, background_filters):
+        B, _, H, W = foreground.shape
+
+        output_images = []
+        for b in range(B):
+            output_patches = []
+            for l in range(H * W):
+                kernel = background_filters[b, l].unsqueeze(0)  # Shape: (1, N, 3, 3)
+                foreground_patch = F.conv2d(
+                    foreground[b].unsqueeze(0), kernel, padding=1
+                )  # Shape: (1, 1, H, W)
+                output_patches.append(foreground_patch)
+            output_images.append(
+                torch.cat(output_patches, dim=1)
+            )  # Shape: (1, L, H, W)
+
+        return torch.cat(output_images, dim=0)  # Shape: (B, L, H, W)
+
+    def apply_deconv_kernels(self, foreground, background_filters):
+        B, _, N, _, _ = background_filters.shape
+
+        output_images = []
+        for b in range(B):
+            output_patches = []
+            for l in range(N):
+                kernel = background_filters[b, :, l].unsqueeze(1)  # Shape: (1, N, 3, 3)
+                foreground_patch = F.conv_transpose2d(
+                    foreground[b].unsqueeze(0), kernel, padding=1
+                )  # Shape: (1, 1, H, W)
+                output_patches.append(foreground_patch)
+            output_images.append(
+                torch.cat(output_patches, dim=1)
+            )  # Shape: (1, L, H, W)
+
+        return torch.cat(output_images, dim=0)  # Shape: (B, L, H, W)
+
+    def forward(self, foreground, background, mask):
+        # Since the original paper's code is mostly unreadable
+        # we decided to follow the steps in section 4.1 verbatim
+        mask_patches = self.extract_mask(mask)
+        background_filters = self.to_filters(self.to_patches(background))
+
+        # Find the normalization factor
+        normalization_factor = normalize_factor(background_filters)
+        background_filters = background_filters / normalization_factor
+
+        # Apply a convolution to the foreground image, which will be used as the query
+        attention_map = self.apply_conv_kernels(foreground, background_filters)
+
+        # Now apply softmax to the attention map
+        attention_map *= mask_patches
+        attention_map = F.softmax(attention_map * self.lambda_value, dim=1)
+        attention_map *= mask_patches
+
+        # Apply transpose convolution to the attention map
+        attention_map = self.apply_deconv_kernels(attention_map, background_filters)
+
+        return attention_map
+
+
+class RefineUpsampleBlock(nn.Module):
+    def __init__(self, in_channels: int = 128) -> None:
+        super().__init__()
+        self.refine = nn.Sequential(
+            ConvBlock(in_channels, 128, 3, 1, 1, activation="elu"),
+            ConvBlock(128, 128, 3, 1, 1, activation="elu"),
         )
-        background = F.interpolate(
-            background, scale_factor=1 / self.rate, mode="nearest"
-        )
 
-        if mask is not None:
-            mask = F.interpolate(mask, scale_factor=1 / self.rate, mode="nearest")
-            foreground = foreground * mask
-
-        # Extract patches from background
-        b_patches = F.unfold(
-            background, kernel_size=self.patch_size, padding=self.patch_size // 2
-        )
-
-        # Reshape patches as convolutional filters
-        b_patches = b_patches.view(
-            background.size(0), background.size(1), self.patch_size, self.patch_size, -1
-        )
-
-        # Match foreground patches with background ones
-        similarity_list = []
-        for i in range(b_patches.size(-1)):
-            patch_i = b_patches[..., i]
-            similarity_i = F.conv2d(foreground, patch_i, padding=self.patch_size // 2)
-            similarity_list.append(similarity_i)
-
-        similarity = torch.cat(similarity_list, dim=1)
-
-        # Normalize with cosine similarity
-        similarity = F.normalize(
-            similarity.view(similarity.size(0), -1), dim=1
-        ).view_as(similarity)
-
-        # Weigh similarity with scaled softmax along x0, y0 dimensions
-        attention_score = F.softmax(self.lambda_value * similarity, dim=1)
-
-        # Reuse extracted background patches as deconvolutional filters to reconstruct foregrounds
-        foreground_size = foreground.size()
-        reconstructed_foreground = torch.zeros_like(foreground)
-        for i in range(attention_score.size(1)):
-            score_i = attention_score[:, i].view(
-                foreground_size[0], 1, foreground_size[2], foreground_size[3]
-            )
-            patch_i = b_patches[..., i]
-            reconstructed_i = F.conv_transpose2d(
-                score_i, patch_i, padding=self.patch_size // 2
-            )
-            reconstructed_foreground += reconstructed_i
-
-        if mask is not None:
-            reconstructed_foreground = reconstructed_foreground * mask
-
-        # Resize the rate of reconstructed foreground
-        reconstructed_foreground = F.interpolate(
-            reconstructed_foreground, scale_factor=self.rate, mode="nearest"
-        )
-
-        return reconstructed_foreground
+    def forward(self, x):
+        x = self.refine(x)
+        return x
 
 
 class AttentiveEncoderDecoderNetwork(nn.Module):
@@ -188,6 +274,8 @@ class AttentiveEncoderDecoderNetwork(nn.Module):
         in_channels: int = 3,
         context_softmax_scale: float = 10.0,
     ):
+        super().__init__()
+
         self.contracting_path = nn.Sequential(
             ConvBlock(in_channels, 32, 5, 1, 2, activation="elu"),
             ConvBlock(32, 32, 3, 2, 1, activation="elu"),
@@ -198,13 +286,10 @@ class AttentiveEncoderDecoderNetwork(nn.Module):
         )
 
         self.contextual_attention = ContextualAttention(
-            patch_size=3, lambda_value=context_softmax_scale, rate=2.0
+            lambda_value=context_softmax_scale, rate=2.0
         )
 
-        self.refine_upsampling_path = nn.Sequential(
-            ConvBlock(128, 128, 3, 1, 1, activation="elu"),
-            ConvBlock(128, 128, 3, 1, 1, activation="elu"),
-        )
+        self.refine_upsampling_path = RefineUpsampleBlock()
 
     def forward(self, x, mask):
         x = self.contracting_path(x)
@@ -213,9 +298,9 @@ class AttentiveEncoderDecoderNetwork(nn.Module):
         return x
 
 
-class ContractingPath(nn.Module):
+class ExpandingPath(nn.Module):
     def __init__(self, out_channels: int):
-        super(ContractingPath, self).__init__()
+        super(ExpandingPath, self).__init__()
 
         # Assumed to be the output with tunning from the encoder
         self.decoder = nn.Sequential(
@@ -233,8 +318,64 @@ class ContractingPath(nn.Module):
         return torch.clip(x, -1.0, 1.0)
 
 
-class SimpleEncoderDecoderNetwork(nn.Module):
-    pass
+class CoarseNetwork(nn.Module):
+    def __init__(self, in_channels: int, out_channels: int) -> None:
+        super().__init__()
+        self.encoder = EncodingConvolutionalPath(in_channels, with_tunning=True)
+        self.decoder = ExpandingPath(out_channels)
+
+    def forward(self, x):
+        _, x = self.encoder(x)
+        x = self.decoder(x)
+        return x
+
+
+class RefinementNetwork(nn.Module):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int = 3,
+        context_softmax_scale: float = 10.0,
+    ) -> None:
+        super().__init__()
+
+        # Define the convolutional branch
+        self.convolution_branch = EncodingConvolutionalPath(
+            in_channels, with_tunning=False
+        )
+
+        # Define the attention branch
+        self.attention_branch = AttentiveEncoderDecoderNetwork(
+            in_channels, context_softmax_scale=context_softmax_scale
+        )
+
+        # Define mechanism to refine the upsample performed by the attention branch
+        self.refine_attention_branch = RefineUpsampleBlock()
+
+        # Mechanism to decode the final output
+        self.decoder = ExpandingPath(out_channels)
+
+        # Mechanism to refine the output of the concatenation
+        self.refine_concat = RefineUpsampleBlock(in_channels=128 * 2)
+
+    def forward(self, x, mask):
+        c_x, x_hallu = self.convolution_branch(x)
+
+        # Resize the mask according to c_x
+        scaled_mask = resize_mask_like(mask, c_x)
+
+        # Apply the attention branch
+        x = self.attention_branch(x, scaled_mask)
+        x = self.refine_attention_branch(x)
+
+        # Concatenate the hallucinated convolutional branch with the attention branch
+        x = torch.cat([x_hallu, x], dim=1)
+        x = self.refine_concat(x)
+
+        # Decode the final output
+        x = self.decoder(x)
+
+        return x
 
 
 if __name__ == "__main__":
