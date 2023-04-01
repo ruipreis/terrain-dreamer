@@ -3,7 +3,7 @@ import torch.nn as nn
 
 from terrdreamer.models.infinity_grid.layers import EncoderDecoderNetwork
 
-class DeepFillv1(nn.Module):
+class DeepFillV1(nn.Module):
     # This is based on the following paper:
     # https://arxiv.org/abs/1801.07892
     #
