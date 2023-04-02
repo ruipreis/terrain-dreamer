@@ -197,39 +197,72 @@ class ContextualAttention(nn.Module):
 
     def apply_conv_kernels(self, foreground, background_filters):
         B, _, H, W = foreground.shape
+        _, NF, C, H2, W2 = background_filters.shape
+        padding = (H2 - 1) // 2, (W2 - 1) // 2
 
         output_images = []
-        for b in range(B):
-            output_patches = []
-            for l in range(H * W):
-                kernel = background_filters[b, l].unsqueeze(0)  # Shape: (1, N, 3, 3)
-                foreground_patch = F.conv2d(
-                    foreground[b].unsqueeze(0), kernel, padding=1
-                )  # Shape: (1, 1, H, W)
-                output_patches.append(foreground_patch)
-            output_images.append(
-                torch.cat(output_patches, dim=1)
-            )  # Shape: (1, L, H, W)
 
-        return torch.cat(output_images, dim=0)  # Shape: (B, L, H, W)
+        for b in range(B):
+            # Rearrange background_filters to (NF, C, H2, W2) shape for the current batch
+            background_filters_batch = background_filters[b].view(NF, C, H2, W2)
+
+            # Perform convolution
+            conv_result = F.conv2d(
+                foreground[b].unsqueeze(0), background_filters_batch, padding=padding
+            )
+            # Shape: (1, NF, H1, W1)
+
+            output_images.append(conv_result)
+
+        # Concatenate the output images along the batch dimension
+        output = torch.cat(output_images, dim=0)  # Shape: (B, NF, H1, W1)
+
+        return output
+
+    # def apply_conv_kernels(self, foreground, background_filters):
+    #     B, _, H, W = foreground.shape
+
+    #     output_images = []
+    #     for b in range(B):
+    #         output_patches = []
+    #         for l in range(H * W):
+    #             kernel = background_filters[b, l].unsqueeze(0)  # Shape: (1, N, 3, 3)
+    #             foreground_patch = F.conv2d(
+    #                 foreground[b].unsqueeze(0), kernel, padding=1
+    #             )  # Shape: (1, 1, H, W)
+    #             output_patches.append(foreground_patch)
+    #         output_images.append(
+    #             torch.cat(output_patches, dim=1)
+    #         )  # Shape: (1, L, H, W)
+    #     x = torch.cat(output_images, dim=0)  # Shape: (B, L, H, W)
+    #     import pdb
+
+    #     pdb.set_trace()
+    #     return x
 
     def apply_deconv_kernels(self, foreground, background_filters):
-        B, _, N, _, _ = background_filters.shape
+        B, _, H, W = foreground.shape
+        _, NF, C, H2, W2 = background_filters.shape
+        padding = (H2 - 1) // 2, (W2 - 1) // 2
 
         output_images = []
-        for b in range(B):
-            output_patches = []
-            for l in range(N):
-                kernel = background_filters[b, :, l].unsqueeze(1)  # Shape: (1, N, 3, 3)
-                foreground_patch = F.conv_transpose2d(
-                    foreground[b].unsqueeze(0), kernel, padding=1
-                )  # Shape: (1, 1, H, W)
-                output_patches.append(foreground_patch)
-            output_images.append(
-                torch.cat(output_patches, dim=1)
-            )  # Shape: (1, L, H, W)
 
-        return torch.cat(output_images, dim=0)  # Shape: (B, L, H, W)
+        for b in range(B):
+            # Rearrange background_filters to (NF, C, H2, W2) shape for the current batch
+            background_filters_batch = background_filters[b].view(NF, C, H2, W2)
+
+            # Perform convolution
+            conv_result = F.conv_transpose2d(
+                foreground[b].unsqueeze(0), background_filters_batch, padding=padding
+            )
+            # Shape: (1, NF, H1, W1)
+
+            output_images.append(conv_result)
+
+        # Concatenate the output images along the batch dimension
+        output = torch.cat(output_images, dim=0)  # Shape: (B, NF, H1, W1)
+
+        return output
 
     def forward(self, foreground, background, mask):
         # Since the original paper's code is mostly unreadable

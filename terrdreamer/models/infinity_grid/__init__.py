@@ -1,10 +1,11 @@
 import torch
 import torch.nn as nn
-
+from pathlib import Path
 from terrdreamer.models.infinity_grid.layers import CoarseNetwork, RefinementNetwork
+from terrdreamer.models.infinity_grid.critics import LocalCritic, GlobalCritic
 
 
-class DeepFillV1(nn.Module):
+class InpaintCAModel(nn.Module):
     # This is based on the following paper:
     # https://arxiv.org/abs/1801.07892
     #
@@ -21,7 +22,7 @@ class DeepFillV1(nn.Module):
         out_channels: int = 3,
         context_softmax_scale: float = 10.0,
     ):
-        super(DeepFillV1, self).__init__()
+        super(InpaintCAModel, self).__init__()
 
         # Define the coarse network
         self.coarse_network = CoarseNetwork(
@@ -39,7 +40,7 @@ class DeepFillV1(nn.Module):
     def prepare_input(self, x, mask):
         # Concatenate the mask and the image
         B, _, H, W = x.shape
-        x_ones = torch.ones(B, 1, H, W)
+        x_ones = torch.ones(B, 1, H, W).to(x.device)
         x = torch.cat([x, x_ones, x_ones * mask], dim=1)
         return x
 
@@ -59,15 +60,49 @@ class DeepFillV1(nn.Module):
         return x_stage1, x_stage2
 
 
-if __name__ == "__main__":
-    deepfill = DeepFillV1()
-    rand_input = torch.rand(1, 3, 256, 256)
-    rand_mask = torch.zeros(1, 1, 256, 256)
-    rand_mask[:, :, 100:150, 100:150] = 1
+class DeepFillV1:
+    def __init__(self, height: int, width: int):
+        self.inpaint_generator = InpaintCAModel()
+        self.local_critic = LocalCritic(height, width)
+        self.global_critic = GlobalCritic(height, width)
 
+    def load_pretrained_if_needed(
+        self,
+        pretrained_generator_path,
+        pretrained_local_discriminator_path,
+        pretrained_global_discriminator_path,
+    ):
+        if pretrained_generator_path is not None:
+            self.inpaint_generator.load_state_dict(
+                torch.load(pretrained_generator_path)
+            )
+
+        if pretrained_local_discriminator_path is not None:
+            self.local_critic.load_state_dict(
+                torch.load(pretrained_local_discriminator_path)
+            )
+
+        if pretrained_global_discriminator_path is not None:
+            self.global_critic.load_state_dict(
+                torch.load(pretrained_global_discriminator_path)
+            )
+
+    def to(self, device):
+        self.inpaint_generator.to(device)
+        self.local_critic.to(device)
+        self.global_critic.to(device)
+
+
+if __name__ == "__main__":
+    deepfill = InpaintCAModel().to("cuda")
+    rand_input = torch.rand(16, 3, 256, 256).to("cuda")
+    rand_mask = torch.zeros(16, 1, 256, 256).to("cuda")
+    rand_mask[:, :, 100:150, 100:150] = 1
     import time
 
     start = time.time()
     x_stage1, x_stage2 = deepfill(rand_input, rand_mask)
     end = time.time()
     print(f"Time taken: {end - start}")
+    print(x_stage1.shape)
+    print(x_stage2.shape)
