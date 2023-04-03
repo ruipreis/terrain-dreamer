@@ -3,6 +3,11 @@ import torch.nn as nn
 from pathlib import Path
 from terrdreamer.models.infinity_grid.layers import CoarseNetwork, RefinementNetwork
 from terrdreamer.models.infinity_grid.critics import LocalCritic, GlobalCritic
+from terrdreamer.models.infinity_grid.loss import (
+    WGAN_GradientPenalty,
+    WeightedL1Loss,
+    WGAN_Loss,
+)
 
 
 class InpaintCAModel(nn.Module):
@@ -59,12 +64,62 @@ class InpaintCAModel(nn.Module):
 
         return x_stage1, x_stage2
 
+    def set_requires_grad(self, requires_grad: bool):
+        for param in self.parameters():
+            param.requires_grad = requires_grad
+
 
 class DeepFillV1:
-    def __init__(self, height: int, width: int):
+    def __init__(
+        self,
+        height: int,
+        width: int,
+        # Indicates weight of gradient penalty
+        lambda_gp: float = 10.0,
+        # Indicates if the model should be run on inference, if this is the case
+        # only the generator will be loaded and no loss.
+        inference: bool = False,
+    ):
         self.inpaint_generator = InpaintCAModel()
-        self.local_critic = LocalCritic(height, width)
-        self.global_critic = GlobalCritic(height, width)
+
+        if not inference:
+            self.local_critic = LocalCritic(height, width)
+            self.global_critic = GlobalCritic(height, width)
+
+            # Get the loss functions for the local and global critic
+            self.wgan_loss = WGAN_Loss()
+            self.wgan_gradient_penalty = WGAN_GradientPenalty(lambda_gp=lambda_gp)
+
+            # Spatial discounted loss uses L1 loss both without by mask normalization
+            self.l1_loss = WeightedL1Loss(normalize_by_mask=False)
+            self.ae_loss = WeightedL1Loss(normalize_by_mask=True)
+
+    def prepare_discriminator_step(self):
+        self.inpaint_generator.set_requires_grad(False)
+        self.local_critic.set_requires_grad(True)
+        self.global_critic.set_requires_grad(True)
+        self.local_critic.zero_grad()
+        self.global_critic.zero_grad()
+
+    def prepare_generator_step(self):
+        self.inpaint_generator.set_requires_grad(True)
+        self.local_critic.set_requires_grad(False)
+        self.global_critic.set_requires_grad(False)
+        self.inpaint_generator.zero_grad()
+
+    def save(self, save_dir: Path):
+        torch.save(
+            self.inpaint_generator.state_dict(),
+            save_dir / "inpaint_generator.pth",
+        )
+        torch.save(
+            self.local_critic.state_dict(),
+            save_dir / "local_critic.pth",
+        )
+        torch.save(
+            self.global_critic.state_dict(),
+            save_dir / "global_critic.pth",
+        )
 
     def load_pretrained_if_needed(
         self,

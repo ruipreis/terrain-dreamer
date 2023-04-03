@@ -111,30 +111,6 @@ class EncodingConvolutionalPath(nn.Module):
         return c_x, x
 
 
-def cosine_similarity_efficient(tensor_a, tensor_b):
-    B, N, H, W, M1 = tensor_a.shape
-    _, _, _, _, M2 = tensor_b.shape
-
-    # Reshape the tensors so that each 3x3 matrix is treated as a vector
-    tensor_a_flat = tensor_a.view(B, N, H * W, M1)
-    tensor_b_flat = tensor_b.view(B, N, H * W, M2)
-
-    # Compute norms
-    tensor_a_norm = torch.norm(tensor_a_flat, dim=2, keepdim=True)
-    tensor_b_norm = torch.norm(tensor_b_flat, dim=2, keepdim=True)
-
-    # Normalize the tensors
-    tensor_a_normalized = tensor_a_flat / tensor_a_norm
-    tensor_b_normalized = tensor_b_flat / tensor_b_norm
-
-    # Compute cosine similarity
-    cosine_similarity_map = torch.matmul(
-        tensor_a_normalized.transpose(2, 3), tensor_b_normalized
-    )
-
-    return cosine_similarity_map
-
-
 def normalize_factor(wi):
     B, N, _, _, _ = wi.shape
 
@@ -175,22 +151,6 @@ class ContextualAttention(nn.Module):
         patches = patches.view(B, N, self.patch_size, self.patch_size, -1)
 
         return patches
-        # # Extract mask patches
-        # mask_patches = F.unfold(mask, kernel_size=self.patch_size, padding=1)
-        # mask_patches = mask_patches.view(B, 1, self.patch_size, self.patch_size, -1)
-
-        # # Create a binary mask indicating which patches contain only background pixels
-        # background_mask = (mask_patches == 0).all(dim=1).all(dim=1).all(dim=1)
-
-        # # Select the patches that correspond to the background only
-        # background_patches = patches.permute(0, 4, 1, 2, 3)
-        # background_patches = background_patches[background_mask]
-
-        # background_patches = background_patches.view(
-        #     B, N, self.patch_size, self.patch_size, -1
-        # )
-
-        # return background_patches
 
     def to_filters(self, x):
         return x.permute(0, 4, 1, 2, 3).contiguous()

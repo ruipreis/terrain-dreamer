@@ -72,5 +72,64 @@ class WeightedL1Loss(nn.Module):
         return l1_loss
 
 
+class WGAN_Loss(nn.Module):
+    def loss_discriminator(self, critic_real, critic_fake):
+        # Calculate the loss for the discriminator
+        loss = -(torch.mean(critic_real) - torch.mean(critic_fake))
+
+        return loss
+
+    def loss_generator(self, critic_fake):
+        # Calculate the loss for the generator
+        loss = -torch.mean(critic_fake)
+
+        return loss
+
+
+class WGAN_GradientPenalty(nn.Module):
+    def __init__(self, lambda_gp=10.0):
+        super(WGAN_GradientPenalty, self).__init__()
+        self.lambda_gp = lambda_gp
+
+    def forward(self, critic, real, fake, mask):
+        # Calculate the gradient penalty loss
+        gradient_penalty = self.gradient_penalty(critic, real, fake, mask)
+
+        # Return the gradient penalty loss
+        return gradient_penalty
+
+    def gradient_penalty(self, critic, real, fake, mask):
+        # Calculate the interpolation
+        alpha = torch.rand(real.size(0), 1, 1, 1).to(real.device)
+        interpolated = alpha * real + (1 - alpha) * fake
+
+        # Calculate critic scores
+        mixed_scores = critic(interpolated)
+
+        # Take the gradient of the scores with respect to the
+        # images
+        gradient = torch.autograd.grad(
+            inputs=interpolated,
+            outputs=mixed_scores,
+            grad_outputs=torch.ones_like(mixed_scores),
+            create_graph=True,
+            retain_graph=True,
+        )[0]
+
+        # Make sure only the valid pixels contribute to the loss
+        gradient = gradient * mask
+
+        # Flatten the gradient
+        gradient = gradient.view(gradient.size(0), -1)
+
+        # Calculate the magnitude of the gradient
+        gradient_norm = gradient.norm(2, dim=1)
+
+        # Penalize the mean squared distance of the gradient from 1
+        gradient_penalty = self.lambda_gp * torch.mean((gradient_norm - 1) ** 2)
+
+        return gradient_penalty
+
+
 if __name__ == "__main__":
     visualize_weight_map(500, 500, (50, 50, 300, 300), gamma=0.99)

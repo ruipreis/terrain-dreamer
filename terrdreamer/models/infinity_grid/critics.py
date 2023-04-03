@@ -29,6 +29,10 @@ class LocalCritic(nn.Module):
     def forward(self, x):
         return self.seq(x)
 
+    def set_requires_grad(self, requires_grad: bool):
+        for param in self.parameters():
+            param.requires_grad = requires_grad
+
 
 class GlobalCritic(nn.Module):
     def __init__(self, height: int, width: int) -> None:
@@ -46,3 +50,7 @@ class GlobalCritic(nn.Module):
 
     def forward(self, x):
         return self.seq(x)
+    
+    def set_requires_grad(self, requires_grad: bool):
+        for param in self.parameters():
+            param.requires_grad = requires_grad
