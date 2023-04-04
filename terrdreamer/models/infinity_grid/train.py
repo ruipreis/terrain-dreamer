@@ -9,20 +9,6 @@ import time
 import wandb
 
 
-def local_patch(x, bbox):
-    """
-    Crop local patch according to bbox.
-    Args:
-        x: input
-        bbox: (top, left, height, width)
-    Returns:
-        torch.Tensor: local patch
-    """
-    top, left, height, width = bbox
-    patch = x[:, :, top : top + height, left : left + width]
-    return patch
-
-
 def random_bbox(
     height, width, min_factor: float, max_factor: float
 ) -> Tuple[int, int, int, int]:
@@ -87,18 +73,20 @@ def train(
             top, left, height, width = random_bbox(
                 x.shape[2], x.shape[3], min_factor, max_factor
             )
+            bbox = (top, left, height, width)
 
             # Create mask
             mask = torch.zeros_like(x)
             mask[:, :, top : top + height, left : left + width] = 1
+            mask = mask.detach()
+
+            # Generator Step (G)
+            deepfill_model.prepare_generator_step()
+            G_losses_dict = deepfill_model.step_generator(x, mask, bbox)
 
             # Discriminator Step (D)
             deepfill_model.prepare_discriminator_step()
             D_losses_dict = deepfill_model.step_discriminator()
-
-            # Generator Step (G)
-            deepfill_model.prepare_generator_step()
-            G_losses_dict = deepfill_model.step_generator()
 
             # Add everything to the loss history
             for k, v in D_losses_dict.items():

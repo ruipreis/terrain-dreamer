@@ -32,7 +32,9 @@ def visualize_weight_map(height, width, bbox, gamma=0.99, filename="weight_map.p
     plt.close(fig)
 
 
-def create_weight_mask(height, width, bbox, gamma=0.99, return_mask: bool = False):
+def create_weight_mask(
+    height, width, bbox, gamma=0.99, return_mask: bool = False, device: str = "cpu"
+):
     # Create a mask of zeros with the same size as the input image
     mask = np.zeros((height, width), dtype=np.uint8)
 
@@ -47,7 +49,7 @@ def create_weight_mask(height, width, bbox, gamma=0.99, return_mask: bool = Fals
 
     # Compute the weight mask M using the distance_transform and gamma
     weight_mask = gamma**distance_transform
-    weight_mask = torch.tensor(weight_mask, dtype=torch.float32)
+    weight_mask = torch.tensor(weight_mask, dtype=torch.float32, device=device).detach()
 
     if return_mask:
         return mask, weight_mask

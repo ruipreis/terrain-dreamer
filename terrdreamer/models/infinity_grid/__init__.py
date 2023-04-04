@@ -2,16 +2,27 @@ import torch
 import torch.nn as nn
 from pathlib import Path
 from terrdreamer.models.infinity_grid.layers import CoarseNetwork, RefinementNetwork
-from terrdreamer.models.infinity_grid.critics import (
-    LocalCritic,
-    GlobalCritic,
-    GeneralCritic,
-)
+from terrdreamer.models.infinity_grid.critics import LocalCritic, GlobalCritic
 from terrdreamer.models.infinity_grid.loss import (
     WGAN_GradientPenalty,
     WeightedL1Loss,
     WGAN_Loss,
+    create_weight_mask,
 )
+
+
+def local_patch(x, bbox):
+    """
+    Crop local patch according to bbox.
+    Args:
+        x: input
+        bbox: (top, left, height, width)
+    Returns:
+        torch.Tensor: local patch
+    """
+    top, left, height, width = bbox
+    patch = x[:, :, top : top + height, left : left + width]
+    return patch
 
 
 class InpaintCAModel(nn.Module):
@@ -78,6 +89,8 @@ class DeepFillV1:
         self,
         height: int,
         width: int,
+        # Gamma for the discounting mask creation
+        gamma: float = 0.99,
         # Indicates weight of gradient penalty
         lambda_gp: float = 10.0,
         # Indicates if the model should be run on inference, if this is the case
@@ -85,9 +98,11 @@ class DeepFillV1:
         inference: bool = False,
     ):
         self.inpaint_generator = InpaintCAModel()
+        self.gamma = gamma
 
         if not inference:
-            self.critic = GeneralCritic(height, width)
+            self.local_critic = LocalCritic(height, width)
+            self.global_critic = GlobalCritic(height, width)
 
             # Get the loss functions for the local and global critic
             self.wgan_loss = WGAN_Loss()
@@ -97,23 +112,113 @@ class DeepFillV1:
             self.l1_loss = WeightedL1Loss(normalize_by_mask=False)
             self.ae_loss = WeightedL1Loss(normalize_by_mask=True)
 
+    def sample_discriminator(self, x, x_complete, local_x, local_x_complete):
+        # Concatenate the variables that refers to local and global regions
+        # and pass them through the discriminator
+        x_discriminator = torch.cat([x, x_complete], dim=0)
+        local_x_discriminator = torch.cat([local_x, local_x_complete], dim=0)
+
+        # Pass the concatenated tensors through the discriminators
+        global_critic_out = self.global_critic(x_discriminator)
+        local_critic_out = self.local_critic(local_x_discriminator)
+
+        # Unroll to get the output for the real and fake images
+        real_global, fake_global = torch.split(global_critic_out, 2, dim=0)
+        real_local, fake_local = torch.split(local_critic_out, 2, dim=0)
+
+        return real_global, fake_global, real_local, fake_local
+
     def step_discriminator(self):
         raise NotImplementedError
 
-    def step_generator(self):
-        raise NotImplementedError
+    def step_generator(self, x, mask, bbox, optimizer):
+        # Mask out the input image
+        x_incomplete = x * (1 - mask)
+
+        # Run through the inpaint generator
+        x1, x2 = self.inpaint_generator(x_incomplete, mask)
+        x_predicted = x2
+
+        # Now create a new tensor that has the original image where the mask is not
+        # and the inpainted image where the mask is
+        x_complete = x_predicted * mask + x_incomplete * (1 - mask)
+
+        # Extract subregions from the various tensors
+        local_x = local_patch(x, bbox)
+        local_x1 = local_patch(x1, bbox)
+        local_x_predicted = local_patch(x_predicted, bbox)
+        local_x_complete = local_patch(x_complete, bbox)
+        local_mask = local_patch(mask, bbox)
+
+        # Create a spatial discounting mask and extract only the local region
+        _, _, H, W = x.shape
+        local_discounted_mask = local_patch(
+            create_weight_mask(H, W, bbox, gamma=self.gamma, device=x.device), bbox
+        )
+
+        # Compute the losses
+
+        # Measure the ability of the model to reconstruct the original region, with
+        # discounting based on distance to nearest non-null pixel
+        l1_loss = self.l1_loss(local_x, local_x1, local_discounted_mask) + self.l1_loss(
+            local_x, local_x_predicted, local_discounted_mask
+        )
+
+        # Ability of the model to reconstruct the un-painted region
+        ae_loss = self.ae_loss(x, x1, 1 - mask) + self.ae_loss(x, x_predicted, 1 - mask)
+
+        # Apply backprop and update the weights
+        loss.backward()
+        optimizer.step()
 
     def prepare_discriminator_step(self):
         # Prepare for the discriminator's step
         self.inpaint_generator.set_requires_grad(False)
-        self.critic.set_requires_grad(True)
-        self.critic.zero_grad()
+        self.local_critic.set_requires_grad(True)
+        self.global_critic.set_requires_grad(True)
+        self.local_critic.zero_grad()
+        self.global_critic.zero_grad()
 
     def prepare_generator_step(self):
         # Prepare for the generator's step
         self.inpaint_generator.set_requires_grad(True)
-        self.critic.set_requires_grad(False)
-        self.critic.zero_grad()
+        self.local_critic.set_requires_grad(False)
+        self.global_critic.set_requires_grad(False)
+        self.inpaint_generator.zero_grad()
+
+    # Add gradient_penalty function
+    def gradient_penalty(
+        self, x, batch_incomplete, batch_complete, mask, critic: str = "local"
+    ):
+        batch_size = batch_incomplete.size(0)
+        alpha = torch.rand(batch_size, 1, 1, 1, device=x.device)
+        interpolates = (
+            (alpha * batch_incomplete + (1 - alpha) * batch_complete)
+            .detach()
+            .requires_grad_(True)
+        )
+
+        if critic == "local":
+            d_interpolates = self.local_critic(interpolates)
+        elif critic == "global":
+            d_interpolates = self.global_critic(interpolates)
+        else:
+            raise ValueError("Critic must be either local or global")
+
+        gradients = torch.autograd.grad(
+            outputs=d_interpolates,
+            inputs=interpolates,
+            grad_outputs=torch.ones_like(d_interpolates, device=x.device),
+            create_graph=True,
+            retain_graph=True,
+            only_inputs=True,
+        )[0]
+
+        gradients = gradients * mask
+
+        gradients = gradients.view(batch_size, -1)
+        gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
+        return gradient_penalty
 
     def save(self, save_dir: Path):
         torch.save(
@@ -121,26 +226,37 @@ class DeepFillV1:
             save_dir / "inpaint_generator.pth",
         )
         torch.save(
-            self.critic.state_dict(),
-            save_dir / "inpaint_critic.pth",
+            self.local_critic.state_dict(),
+            save_dir / "inpaint_local_critic.pth",
+        )
+        torch.save(
+            self.global_critic.state_dict(),
+            save_dir / "inpaint_global_critic.pth",
         )
 
     def load_pretrained_if_needed(
         self,
         pretrained_generator_path,
-        pretrained_discriminator_path,
+        pretrained_local_critic_path,
+        pretrained_global_critic_path,
     ):
         if pretrained_generator_path is not None:
             self.inpaint_generator.load_state_dict(
                 torch.load(pretrained_generator_path)
             )
 
-        if pretrained_discriminator_path is not None:
-            self.critic.load_state_dict(torch.load(pretrained_discriminator_path))
+        if pretrained_local_critic_path is not None:
+            self.local_critic.load_state_dict(torch.load(pretrained_local_critic_path))
+
+        if pretrained_global_critic_path is not None:
+            self.global_critic.load_state_dict(
+                torch.load(pretrained_global_critic_path)
+            )
 
     def to(self, device):
         self.inpaint_generator.to(device)
-        self.critic.to(device)
+        self.local_critic.to(device)
+        self.global_critic.to(device)
 
 
 if __name__ == "__main__":
