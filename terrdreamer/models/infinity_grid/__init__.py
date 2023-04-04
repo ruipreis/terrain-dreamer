@@ -2,7 +2,11 @@ import torch
 import torch.nn as nn
 from pathlib import Path
 from terrdreamer.models.infinity_grid.layers import CoarseNetwork, RefinementNetwork
-from terrdreamer.models.infinity_grid.critics import LocalCritic, GlobalCritic
+from terrdreamer.models.infinity_grid.critics import (
+    LocalCritic,
+    GlobalCritic,
+    GeneralCritic,
+)
 from terrdreamer.models.infinity_grid.loss import (
     WGAN_GradientPenalty,
     WeightedL1Loss,
@@ -83,8 +87,7 @@ class DeepFillV1:
         self.inpaint_generator = InpaintCAModel()
 
         if not inference:
-            self.local_critic = LocalCritic(height, width)
-            self.global_critic = GlobalCritic(height, width)
+            self.critic = GeneralCritic(height, width)
 
             # Get the loss functions for the local and global critic
             self.wgan_loss = WGAN_Loss()
@@ -94,18 +97,23 @@ class DeepFillV1:
             self.l1_loss = WeightedL1Loss(normalize_by_mask=False)
             self.ae_loss = WeightedL1Loss(normalize_by_mask=True)
 
+    def step_discriminator(self):
+        raise NotImplementedError
+
+    def step_generator(self):
+        raise NotImplementedError
+
     def prepare_discriminator_step(self):
+        # Prepare for the discriminator's step
         self.inpaint_generator.set_requires_grad(False)
-        self.local_critic.set_requires_grad(True)
-        self.global_critic.set_requires_grad(True)
-        self.local_critic.zero_grad()
-        self.global_critic.zero_grad()
+        self.critic.set_requires_grad(True)
+        self.critic.zero_grad()
 
     def prepare_generator_step(self):
+        # Prepare for the generator's step
         self.inpaint_generator.set_requires_grad(True)
-        self.local_critic.set_requires_grad(False)
-        self.global_critic.set_requires_grad(False)
-        self.inpaint_generator.zero_grad()
+        self.critic.set_requires_grad(False)
+        self.critic.zero_grad()
 
     def save(self, save_dir: Path):
         torch.save(
@@ -113,39 +121,26 @@ class DeepFillV1:
             save_dir / "inpaint_generator.pth",
         )
         torch.save(
-            self.local_critic.state_dict(),
-            save_dir / "local_critic.pth",
-        )
-        torch.save(
-            self.global_critic.state_dict(),
-            save_dir / "global_critic.pth",
+            self.critic.state_dict(),
+            save_dir / "inpaint_critic.pth",
         )
 
     def load_pretrained_if_needed(
         self,
         pretrained_generator_path,
-        pretrained_local_discriminator_path,
-        pretrained_global_discriminator_path,
+        pretrained_discriminator_path,
     ):
         if pretrained_generator_path is not None:
             self.inpaint_generator.load_state_dict(
                 torch.load(pretrained_generator_path)
             )
 
-        if pretrained_local_discriminator_path is not None:
-            self.local_critic.load_state_dict(
-                torch.load(pretrained_local_discriminator_path)
-            )
-
-        if pretrained_global_discriminator_path is not None:
-            self.global_critic.load_state_dict(
-                torch.load(pretrained_global_discriminator_path)
-            )
+        if pretrained_discriminator_path is not None:
+            self.critic.load_state_dict(torch.load(pretrained_discriminator_path))
 
     def to(self, device):
         self.inpaint_generator.to(device)
-        self.local_critic.to(device)
-        self.global_critic.to(device)
+        self.critic.to(device)
 
 
 if __name__ == "__main__":

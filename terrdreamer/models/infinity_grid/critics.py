@@ -54,3 +54,17 @@ class GlobalCritic(nn.Module):
     def set_requires_grad(self, requires_grad: bool):
         for param in self.parameters():
             param.requires_grad = requires_grad
+
+
+class GeneralCritic(nn.Module):
+    def __init__(self, height: int, width: int) -> None:
+        super().__init__()
+        self.local_critic = LocalCritic(height, width)
+        self.global_critic = GlobalCritic(height, width)
+
+    def forward(self, local_batch, global_batch):
+        return self.local_critic(local_batch), self.global_critic(global_batch)
+
+    def set_requires_grad(self, requires_grad: bool):
+        self.local_critic.set_requires_grad(requires_grad)
+        self.global_critic.set_requires_grad(requires_grad)
