@@ -74,7 +74,7 @@ class WeightedL1Loss(nn.Module):
         return l1_loss
 
 
-class WGAN_Loss(nn.Module):
+class WGAN_Loss:
     def loss_discriminator(self, critic_real, critic_fake):
         # Calculate the loss for the discriminator
         loss = -(torch.mean(critic_real) - torch.mean(critic_fake))

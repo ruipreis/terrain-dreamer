@@ -128,8 +128,52 @@ class DeepFillV1:
 
         return real_global, fake_global, real_local, fake_local
 
-    def step_discriminator(self):
-        raise NotImplementedError
+    def step_discriminator(self, x, mask, bbox, optimizer):
+        # Mask out the input image
+        x_incomplete = x * (1 - mask)
+
+        # Run through the inpaint generator
+        _, x2 = self.inpaint_generator(x_incomplete, mask)
+        x_predicted = x2
+
+        # Now create a new tensor that has the original image where the mask is not
+        # and the inpainted image where the mask is
+        x_complete = x_predicted * mask + x_incomplete * (1 - mask)
+
+        # Extract subregions from the various tensors
+        local_x = local_patch(x, bbox)
+        local_x_complete = local_patch(x_complete, bbox)
+        local_mask = local_patch(mask, bbox)
+
+        # Pass through both discriminators
+        real_global, fake_global, real_local, fake_local = self.sample_discriminator(
+            x, x_complete, local_x, local_x_complete
+        )
+
+        # Compute the loss for the joint discriminator
+        d_loss_global = self.wgan_loss.loss_discriminator(real_global, fake_global)
+        d_loss_local = self.wgan_loss.loss_discriminator(real_local, fake_local)
+        d_loss = d_loss_global + d_loss_local
+
+        # Compute the gradient penalty for the joint discriminator
+        gp_global = self.wgan_gradient_penalty(self.global_critic, x, x_complete, mask)
+        gp_local = self.wgan_gradient_penalty(
+            self.local_critic, local_x, local_x_complete, local_mask
+        )
+        gp = gp_global + gp_local
+
+        # Compute the total loss
+        loss = d_loss + gp
+
+        # Backpropagate the loss
+        loss.backward()
+        optimizer.step()
+
+        return {
+            "d_loss": d_loss.item(),
+            "gp": gp.item(),
+            "loss": loss.item(),
+        }
 
     def step_generator(self, x, mask, bbox, optimizer):
         # Mask out the input image
@@ -148,7 +192,10 @@ class DeepFillV1:
         local_x1 = local_patch(x1, bbox)
         local_x_predicted = local_patch(x_predicted, bbox)
         local_x_complete = local_patch(x_complete, bbox)
-        local_mask = local_patch(mask, bbox)
+
+        # Pass through both discriminators
+        fake_global = self.global_critic(x_complete)
+        fake_local = self.local_critic(local_x_complete)
 
         # Create a spatial discounting mask and extract only the local region
         _, _, H, W = x.shape
@@ -157,6 +204,11 @@ class DeepFillV1:
         )
 
         # Compute the losses
+
+        # WGAN loss - for the local and global critic
+        wgan_loss = self.wgan_loss.loss_generator(
+            fake_global
+        ) + self.wgan_loss.loss_generator(fake_local)
 
         # Measure the ability of the model to reconstruct the original region, with
         # discounting based on distance to nearest non-null pixel
@@ -167,9 +219,19 @@ class DeepFillV1:
         # Ability of the model to reconstruct the un-painted region
         ae_loss = self.ae_loss(x, x1, 1 - mask) + self.ae_loss(x, x_predicted, 1 - mask)
 
+        # Aggregate the losses
+        loss = wgan_loss + l1_loss + ae_loss
+
         # Apply backprop and update the weights
         loss.backward()
         optimizer.step()
+
+        return {
+            "wgan_loss": wgan_loss.item(),
+            "l1_loss": l1_loss.item(),
+            "ae_loss": ae_loss.item(),
+            "loss": loss.item(),
+        }
 
     def prepare_discriminator_step(self):
         # Prepare for the discriminator's step
