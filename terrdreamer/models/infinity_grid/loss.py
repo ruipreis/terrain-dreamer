@@ -55,7 +55,7 @@ def create_weight_mask(
         return mask, weight_mask
 
     # Convert the weight mask back to a PyTorch tensor
-    return weight_mask
+    return weight_mask.unsqueeze(0).unsqueeze(0)
 
 
 class WeightedL1Loss(nn.Module):
@@ -103,19 +103,20 @@ class WGAN_GradientPenalty(nn.Module):
     def gradient_penalty(self, critic, real, fake, mask):
         # Calculate the interpolation
         alpha = torch.rand(real.size(0), 1, 1, 1).to(real.device)
-        interpolated = alpha * real + (1 - alpha) * fake
+        interpolates = (alpha * real + (1 - alpha) * fake).detach().requires_grad_(True)
 
         # Calculate critic scores
-        mixed_scores = critic(interpolated)
+        d_interpolates = critic(interpolates)
 
         # Take the gradient of the scores with respect to the
         # images
         gradient = torch.autograd.grad(
-            inputs=interpolated,
-            outputs=mixed_scores,
-            grad_outputs=torch.ones_like(mixed_scores),
+            outputs=d_interpolates,
+            inputs=interpolates,
+            grad_outputs=torch.ones_like(d_interpolates),
             create_graph=True,
             retain_graph=True,
+            only_inputs=True,
         )[0]
 
         # Make sure only the valid pixels contribute to the loss

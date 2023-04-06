@@ -238,9 +238,8 @@ class ContextualAttention(nn.Module):
         attention_map = self.apply_conv_kernels(foreground, background_filters)
 
         # Now apply softmax to the attention map
-        attention_map *= mask_patches
-        attention_map = F.softmax(attention_map * self.lambda_value, dim=1)
-        attention_map *= mask_patches
+        attention_map = F.softmax(attention_map *mask_patches* self.lambda_value, dim=1)
+        attention_map = attention_map*mask_patches
 
         # Apply transpose convolution to the attention map
         attention_map = self.apply_deconv_kernels(attention_map, background_filters)

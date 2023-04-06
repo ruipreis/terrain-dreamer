@@ -16,6 +16,8 @@ class LocalCritic(nn.Module):
     def __init__(self, height: int, width: int) -> None:
         super().__init__()
         cnum = 64
+        f_height = height // (2**4)
+        f_width = width // (2**4)
 
         self.seq = nn.Sequential(
             ConvBlock(3, cnum),
@@ -23,7 +25,7 @@ class LocalCritic(nn.Module):
             ConvBlock(cnum * 2, cnum * 4),
             ConvBlock(cnum * 4, cnum * 8),
             nn.Flatten(),
-            nn.Linear(cnum * 8 * height * width, 1),
+            nn.Linear(cnum * 8 * f_height * f_width, 1),
         )
 
     def forward(self, x):
@@ -44,13 +46,20 @@ class GlobalCritic(nn.Module):
             ConvBlock(cnum, cnum * 2),
             ConvBlock(cnum * 2, cnum * 4),
             ConvBlock(cnum * 4, cnum * 4),
-            nn.Flatten(),
-            nn.Linear(cnum * 4 * height * width, 1),
         )
 
+        self.flatten = nn.Flatten()
+
+        f_height = height // (2**4)
+        f_width = width // (2**4)
+        self.linear = nn.Linear(cnum * 4 * f_height * f_width, 1)
+
     def forward(self, x):
-        return self.seq(x)
-    
+        x = self.seq(x)
+        x = self.flatten(x)
+        x = self.linear(x)
+        return x
+
     def set_requires_grad(self, requires_grad: bool):
         for param in self.parameters():
             param.requires_grad = requires_grad

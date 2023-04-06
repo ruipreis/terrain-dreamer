@@ -89,6 +89,7 @@ class DeepFillV1:
         self,
         height: int,
         width: int,
+        scale_factor: float,
         # Gamma for the discounting mask creation
         gamma: float = 0.99,
         # Indicates weight of gradient penalty
@@ -101,8 +102,10 @@ class DeepFillV1:
         self.gamma = gamma
 
         if not inference:
-            self.local_critic = LocalCritic(height, width)
             self.global_critic = GlobalCritic(height, width)
+            self.local_critic = LocalCritic(
+                int(height * scale_factor), int(width * scale_factor)
+            )
 
             # Get the loss functions for the local and global critic
             self.wgan_loss = WGAN_Loss()
@@ -123,12 +126,16 @@ class DeepFillV1:
         local_critic_out = self.local_critic(local_x_discriminator)
 
         # Unroll to get the output for the real and fake images
-        real_global, fake_global = torch.split(global_critic_out, 2, dim=0)
-        real_local, fake_local = torch.split(local_critic_out, 2, dim=0)
+        real_global, fake_global = torch.split(
+            global_critic_out, global_critic_out.size(0) // 2, dim=0
+        )
+        real_local, fake_local = torch.split(
+            local_critic_out, local_critic_out.size(0) // 2, dim=0
+        )
 
         return real_global, fake_global, real_local, fake_local
 
-    def step_discriminator(self, x, mask, bbox, optimizer):
+    def step_discriminator(self, x, mask, bbox, local_optimizer, global_optimizer):
         # Mask out the input image
         x_incomplete = x * (1 - mask)
 
@@ -156,7 +163,9 @@ class DeepFillV1:
         d_loss = d_loss_global + d_loss_local
 
         # Compute the gradient penalty for the joint discriminator
-        gp_global = self.wgan_gradient_penalty(self.global_critic, x, x_complete, mask)
+        gp_global = self.wgan_gradient_penalty(
+            self.global_critic, x, x_complete.detach(), mask
+        )
         gp_local = self.wgan_gradient_penalty(
             self.local_critic, local_x, local_x_complete, local_mask
         )
@@ -167,13 +176,17 @@ class DeepFillV1:
 
         # Backpropagate the loss
         loss.backward()
-        optimizer.step()
+        local_optimizer.step()
+        global_optimizer.step()
 
         return {
             "d_loss": d_loss.item(),
             "gp": gp.item(),
             "loss": loss.item(),
         }
+
+    def eval(self, masked_x, mask):
+        return self.inpaint_generator(masked_x, mask)
 
     def step_generator(self, x, mask, bbox, optimizer):
         # Mask out the input image
@@ -247,40 +260,6 @@ class DeepFillV1:
         self.local_critic.set_requires_grad(False)
         self.global_critic.set_requires_grad(False)
         self.inpaint_generator.zero_grad()
-
-    # Add gradient_penalty function
-    def gradient_penalty(
-        self, x, batch_incomplete, batch_complete, mask, critic: str = "local"
-    ):
-        batch_size = batch_incomplete.size(0)
-        alpha = torch.rand(batch_size, 1, 1, 1, device=x.device)
-        interpolates = (
-            (alpha * batch_incomplete + (1 - alpha) * batch_complete)
-            .detach()
-            .requires_grad_(True)
-        )
-
-        if critic == "local":
-            d_interpolates = self.local_critic(interpolates)
-        elif critic == "global":
-            d_interpolates = self.global_critic(interpolates)
-        else:
-            raise ValueError("Critic must be either local or global")
-
-        gradients = torch.autograd.grad(
-            outputs=d_interpolates,
-            inputs=interpolates,
-            grad_outputs=torch.ones_like(d_interpolates, device=x.device),
-            create_graph=True,
-            retain_graph=True,
-            only_inputs=True,
-        )[0]
-
-        gradients = gradients * mask
-
-        gradients = gradients.view(batch_size, -1)
-        gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
-        return gradient_penalty
 
     def save(self, save_dir: Path):
         torch.save(
