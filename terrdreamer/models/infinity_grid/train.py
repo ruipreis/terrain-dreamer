@@ -11,10 +11,21 @@ from tqdm import tqdm
 import torchvision
 
 
-def random_bbox(height, width, scale_factor) -> Tuple[int, int, int, int]:
+def random_bbox(
+    height, width, min_scale_factor, max_scale_factor
+) -> Tuple[int, int, int, int]:
     img_tensor = torch.ones(1, height, width)
-    crop_height = int(height * scale_factor)
-    crop_width = int(width * scale_factor)
+
+    # Generate a random crop height
+    crop_height = random.randint(
+        int(height * min_scale_factor), int(height * max_scale_factor)
+    )
+
+    # Generate a random crop width
+    crop_width = random.randint(
+        int(width * min_scale_factor), int(width * max_scale_factor)
+    )
+
     random_crop = RandomCrop(size=(crop_height, crop_width), pad_if_needed=True)
     top, left, _, _ = random_crop.get_params(img_tensor, (crop_height, crop_width))
     return top, left, crop_height, crop_width
@@ -34,7 +45,8 @@ def train(
     lr: float = 1e-4,
     beta1: float = 0.5,
     beta2: float = 0.9,
-    scale_factor: float = 0.5,
+    min_scale_factor: float = 0.3,
+    max_scale_factor: float = 0.6,
 ):
     # Instantiate the dataset
     dataset = AW3D30Dataset(train_dataset, limit=limit)
@@ -47,7 +59,7 @@ def train(
     loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
     # Instantiate the model
-    deepfill_model = DeepFillV1(H, W, scale_factor)
+    deepfill_model = DeepFillV1()
 
     # If needed, load pretrained weights
     deepfill_model.load_pretrained_if_needed(
@@ -80,7 +92,12 @@ def train(
             x = x.to(device)
 
             # Sample random bbox
-            top, left, height, width = random_bbox(x.shape[2], x.shape[3], scale_factor)
+            top, left, height, width = random_bbox(
+                x.shape[2],
+                x.shape[3],
+                min_scale_factor=min_scale_factor,
+                max_scale_factor=max_scale_factor,
+            )
             bbox = (top, left, height, width)
 
             # Create mask
@@ -109,6 +126,13 @@ def train(
                 loss_history.setdefault(r_k, [])
                 loss_history[r_k].append(v)
 
+        epoch_end_time = time.time()
+        epoch_duration = epoch_end_time - epoch_start_time
+
+        # Construct the loss message
+        loss_message = {k: torch.mean(torch.tensor(v)) for k, v in loss_history.items()}
+        loss_message["epoch_duration"] = epoch_duration
+
         with torch.no_grad():
             # Pick 8 random images from the test dataset
             test_images = random.sample(list(range(limit // 10)), 8)
@@ -117,7 +141,10 @@ def train(
 
             # Sample random bbox and create a mask
             top, left, height, width = random_bbox(
-                test_images.shape[2], test_images.shape[3], scale_factor
+                test_images.shape[2],
+                test_images.shape[3],
+                min_scale_factor=min_scale_factor,
+                max_scale_factor=max_scale_factor,
             )
             bbox = (top, left, height, width)
             mask = torch.zeros(test_images.size(0), 1, H, W, device=x.device)
@@ -136,15 +163,11 @@ def train(
                 value_range=(-1, 1),
             )
 
+            # Store the image in wandb
+            loss_message["samples"] = wandb.Image(grid)
+
             # Save to file
             torchvision.utils.save_image(grid, f"epoch_{epoch}.png")
-
-        epoch_end_time = time.time()
-        epoch_duration = epoch_end_time - epoch_start_time
-
-        # Construct the loss message
-        loss_message = {k: torch.mean(torch.tensor(v)) for k, v in loss_history.items()}
-        loss_message["epoch_duration"] = epoch_duration
 
         # Ever so often, save the model and sample some images
         if epoch % 10 == 0:

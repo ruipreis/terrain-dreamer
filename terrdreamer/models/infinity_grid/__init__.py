@@ -46,13 +46,13 @@ class InpaintCAModel(nn.Module):
 
         # Define the coarse network
         self.coarse_network = CoarseNetwork(
-            in_channels=in_channels + 1 + 1,  # 1 for mask, 1 for depth
+            in_channels=in_channels + 1,  # 1 for mask, 1 for depth
             out_channels=out_channels,
         )
 
         # Define the refinement network
         self.refinement_network = RefinementNetwork(
-            in_channels=in_channels + 1 + 1,  # 1 for mask, 1 for depth
+            in_channels=in_channels + 1,  # 1 for mask, 1 for depth
             out_channels=out_channels,
             context_softmax_scale=context_softmax_scale,
         )
@@ -61,7 +61,7 @@ class InpaintCAModel(nn.Module):
         # Concatenate the mask and the image
         B, _, H, W = x.shape
         x_ones = torch.ones(B, 1, H, W).to(x.device)
-        x = torch.cat([x, x_ones, x_ones * mask], dim=1)
+        x = torch.cat([x, x_ones * mask], dim=1)
         return x
 
     def forward(self, x, mask):
@@ -87,9 +87,6 @@ class InpaintCAModel(nn.Module):
 class DeepFillV1:
     def __init__(
         self,
-        height: int,
-        width: int,
-        scale_factor: float,
         # Gamma for the discounting mask creation
         gamma: float = 0.99,
         # Indicates weight of gradient penalty
@@ -102,10 +99,8 @@ class DeepFillV1:
         self.gamma = gamma
 
         if not inference:
-            self.global_critic = GlobalCritic(height, width)
-            self.local_critic = LocalCritic(
-                int(height * scale_factor), int(width * scale_factor)
-            )
+            self.global_critic = GlobalCritic()
+            self.local_critic = LocalCritic()
 
             # Get the loss functions for the local and global critic
             self.wgan_loss = WGAN_Loss()
@@ -186,7 +181,10 @@ class DeepFillV1:
         }
 
     def eval(self, masked_x, mask):
-        return self.inpaint_generator(masked_x, mask)
+        x1, x2 = self.inpaint_generator(masked_x, mask)
+        merged_x1 = x1 * mask + masked_x * (1 - mask)
+        merged_x2 = x2 * mask + masked_x * (1 - mask)
+        return merged_x1, merged_x2
 
     def step_generator(self, x, mask, bbox, optimizer):
         # Mask out the input image
