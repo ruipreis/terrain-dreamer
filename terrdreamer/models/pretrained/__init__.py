@@ -2,6 +2,7 @@ import os
 import gdown
 import pkg_resources
 import torch.nn as nn
+import torch
 from terrdreamer.models.image_to_dem import DEM_Pix2Pix
 from terrdreamer.dataset import DEM_MIN_ELEVATION, DEM_MAX_ELEVATION
 from terrdreamer.models.progan_satelite.progan import Generator
