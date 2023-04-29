@@ -43,7 +43,7 @@ if __name__ == "__main__":
         search_results = client.search(
             collection_name=collection_name,
             query_vector=feature_vectors[i].tolist(),
-            limit=5,
+            limit=10,
         )
 
         nearest_neighbors[i] = [search_result.id for search_result in search_results]

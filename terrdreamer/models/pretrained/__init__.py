@@ -8,6 +8,7 @@ from terrdreamer.dataset import DEM_MIN_ELEVATION, DEM_MAX_ELEVATION
 from terrdreamer.models.progan_satelite.progan import Generator
 from terrdreamer.models.infinity_grid import DeepFillV1
 from terrdreamer.models.infinity_grid.train import random_bbox
+from terrdreamer.models import replace_batchnorm2d_with_instancenorm
 
 
 def download_from_google_drive(file_id, output_path):
@@ -68,7 +69,7 @@ class PretrainedImageToDEM(nn.Module):
     GENERATOR_FILE_NAME = "image_to_dem_generator.pt"
     FILE_ID = "1FfRDMAHhiKQh29TDQcGfBPb0x9mZNVkz"
 
-    def __init__(self):
+    def __init__(self, use_instance_norm=False):
         super().__init__()
         self.model_path = check_and_download_pretrained_model(
             self.GENERATOR_FILE_NAME, self.FILE_ID
@@ -83,6 +84,9 @@ class PretrainedImageToDEM(nn.Module):
         # Make sure the gradient is not computed
         self.pix2pix.generator.set_requires_grad(False)
 
+        if use_instance_norm:
+            replace_batchnorm2d_with_instancenorm(self.pix2pix.generator)
+
     def forward(self, x):
         return self.pix2pix.generator(x)
 
@@ -91,7 +95,7 @@ class PretrainedDEMToImage(nn.Module):
     GENERATOR_FILE_NAME = "dem_to_image_generator.pt"
     FILE_ID = "1aQ0izHbKW7fJ2-FXjg23k6fCcr9uWUM8"
 
-    def __init__(self):
+    def __init__(self, use_instance_norm=False):
         super().__init__()
         self.model_path = check_and_download_pretrained_model(
             self.GENERATOR_FILE_NAME, self.FILE_ID
@@ -105,6 +109,9 @@ class PretrainedDEMToImage(nn.Module):
 
         # Make sure the gradient is not computed
         self.pix2pix.generator.set_requires_grad(False)
+
+        if use_instance_norm:
+            replace_batchnorm2d_with_instancenorm(self.pix2pix.generator)
 
     def forward(self, x):
         return self.pix2pix.generator(x)
@@ -177,6 +184,12 @@ if __name__ == "__main__":
     parser.add_argument("--inpainting", action="store_true")
     parser.add_argument("--min-scale-factor", type=float, default=0.3)
     parser.add_argument("--max-scale-factor", type=float, default=0.7)
+
+    # Some of the models were trained with batch normalization, since pix2pix, for example
+    # expects batch normalization, we need to replace it with instance normalization. So
+    # that we can use a greater batch size.
+    parser.add_argument("--use-instancenorm", action="store_true")
+
     ARGS = parser.parse_args()
 
     # Grab the device
@@ -195,7 +208,7 @@ if __name__ == "__main__":
     if ARGS.image_to_dem:
         # When using IMAGE TO DEM and DEM TO IMAGE, it's very important to use
         # batch size of 1, due to the expected instance normalization.
-        model = PretrainedImageToDEM().to(device)
+        model = PretrainedImageToDEM(use_instance_norm=ARGS.use_instancenorm).to(device)
 
         # Run the model
         dem = model(sat)
@@ -206,12 +219,13 @@ if __name__ == "__main__":
             torch.cat([sat, dem], dim=0),
             normalize=True,
             value_range=(-1, 1),
+            nrow=ARGS.batch_size,
         )
 
         # Save the grid
         torchvision.utils.save_image(grid, "image_to_dem.png")
     elif ARGS.dem_to_image:
-        model = PretrainedDEMToImage().to(device)
+        model = PretrainedDEMToImage(use_instance_norm=ARGS.use_instancenorm).to(device)
 
         # Run the model
         sat = model(gtif)
@@ -222,6 +236,7 @@ if __name__ == "__main__":
             torch.cat([gtif, sat], dim=0),
             normalize=True,
             value_range=(-1, 1),
+            nrow=ARGS.batch_size,
         )
 
         # Save the grid
