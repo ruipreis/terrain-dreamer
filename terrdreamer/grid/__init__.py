@@ -1,13 +1,11 @@
-from terrdreamer.models.pretrained import PretrainedProGAN
-
-import torch
-from torchvision.models import resnet50, ResNet50_Weights
-import torch.nn.functional as F
-
-from terrdreamer.grid.run import recreate_collection, get_client
-from qdrant_client.models import PointStruct
-
 import cv2
+import torch
+import torch.nn.functional as F
+from qdrant_client.models import PointStruct
+from torchvision.models import ResNet50_Weights, resnet50
+
+from terrdreamer.grid.run import get_client, recreate_collection
+from terrdreamer.models.pretrained import PretrainedProGAN
 
 
 def tensor_transform(input_tensor):
@@ -45,6 +43,9 @@ class FeatureVectorExtractor:
         self.model = torch.nn.Sequential(*(list(self.model.children())[:-1]))
         self.model.eval()
 
+    def get_dim(self):
+        return 2048
+
     def __call__(self, img):
         img = tensor_transform(img)
         vecs = self.model(img)
@@ -60,8 +61,8 @@ class FeatureVectorExtractor:
         return self
 
 
-def random_sample(num_samples):
-    return torch.randn(num_samples, 256, 1, 1, device="cuda")
+def random_sample(num_samples, device: str = "cuda"):
+    return torch.randn(num_samples, 256, 1, 1, device=device)
 
 
 if __name__ == "__main__":
@@ -124,7 +125,7 @@ if __name__ == "__main__":
         for idx in range(n_vectors, n_vectors + batch_size):
             sat_img = rand_sat[idx % batch_size].numpy().transpose(1, 2, 0)
 
-            # Turn the image into rgb
+            # Turn the image into bgr
             sat_img = sat_img[:, :, ::-1]
 
             cv2.imwrite(str(image_dir / f"{idx}.png"), sat_img)

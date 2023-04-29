@@ -1,14 +1,16 @@
 import os
+
 import gdown
 import pkg_resources
-import torch.nn as nn
 import torch
+import torch.nn as nn
+
+from terrdreamer.dataset import DEM_MAX_ELEVATION, DEM_MIN_ELEVATION
+from terrdreamer.models import replace_batchnorm2d_with_instancenorm
 from terrdreamer.models.image_to_dem import DEM_Pix2Pix
-from terrdreamer.dataset import DEM_MIN_ELEVATION, DEM_MAX_ELEVATION
-from terrdreamer.models.progan_satelite.progan import Generator
 from terrdreamer.models.infinity_grid import DeepFillV1
 from terrdreamer.models.infinity_grid.train import random_bbox
-from terrdreamer.models import replace_batchnorm2d_with_instancenorm
+from terrdreamer.models.progan_satelite.progan import Generator
 
 
 def download_from_google_drive(file_id, output_path):
@@ -87,7 +89,7 @@ class PretrainedImageToDEM(nn.Module):
         if use_instance_norm:
             replace_batchnorm2d_with_instancenorm(self.pix2pix.generator)
 
-    def forward(self, x):
+    def forward(self, x) -> torch.tensor:
         return self.pix2pix.generator(x)
 
 
@@ -113,7 +115,7 @@ class PretrainedDEMToImage(nn.Module):
         if use_instance_norm:
             replace_batchnorm2d_with_instancenorm(self.pix2pix.generator)
 
-    def forward(self, x):
+    def forward(self, x) -> torch.tensor:
         return self.pix2pix.generator(x)
 
 
@@ -136,7 +138,7 @@ class PretrainedProGAN(nn.Module):
         # Make sure the gradient is not computed
         self.progan.eval()
 
-    def forward(self, x):
+    def forward(self, x) -> torch.tensor:
         # Alpha = 1, n_steps = 7
         return self.progan(x, 1, 7 - 1)
 
@@ -170,10 +172,12 @@ class PretrainedDeepfillV1:
 if __name__ == "__main__":
     import argparse
     from pathlib import Path
-    from terrdreamer.dataset import AW3D30Dataset
+
     import torch
-    from torch.utils.data import DataLoader
     import torchvision
+    from torch.utils.data import DataLoader
+
+    from terrdreamer.dataset import AW3D30Dataset
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", type=Path, required=True)

@@ -1,10 +1,8 @@
+import matplotlib.pyplot as plt
+import numpy as np
+import scipy.ndimage as ndimage
 import torch
 import torch.nn as nn
-import scipy.ndimage as ndimage
-
-
-import numpy as np
-import matplotlib.pyplot as plt
 
 
 def visualize_weight_map(height, width, bbox, gamma=0.99, filename="weight_map.png"):

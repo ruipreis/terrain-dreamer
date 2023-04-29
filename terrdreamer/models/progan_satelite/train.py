@@ -3,9 +3,9 @@ from pathlib import Path
 from typing import List
 
 import torch
+import wandb
 from tqdm import tqdm
 
-import wandb
 from terrdreamer.dataset import AW3D30Dataset
 from terrdreamer.models.progan_satelite.progan import Discriminator, Generator
 from terrdreamer.models.progan_satelite.progan_utils import (

@@ -1,8 +1,9 @@
-from terrdreamer.models.pretrained import PretrainedProGAN
-from terrdreamer.grid import FeatureVectorExtractor, random_sample
-from terrdreamer.grid.run import get_client
 import cv2
 import numpy as np
+
+from terrdreamer.grid import FeatureVectorExtractor, random_sample
+from terrdreamer.grid.run import get_client
+from terrdreamer.models.pretrained import PretrainedProGAN
 
 if __name__ == "__main__":
     import argparse

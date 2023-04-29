@@ -1,6 +1,7 @@
 from sklearn.cluster import KMeans
 import numpy as np
 
+
 class ImageCluster:
     """
     The ImageCluster class performs clustering of images based on their feature vectors.

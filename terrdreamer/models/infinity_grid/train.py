@@ -1,14 +1,16 @@
-import torch
 import random
-from torchvision.transforms import RandomCrop
-from typing import Tuple
+import time
 from pathlib import Path
+from typing import Tuple
+
+import torch
+import torchvision
+import wandb
+from torchvision.transforms import RandomCrop
+from tqdm import tqdm
+
 from terrdreamer.dataset import AW3D30Dataset
 from terrdreamer.models.infinity_grid import DeepFillV1
-import time
-import wandb
-from tqdm import tqdm
-import torchvision
 
 
 def random_bbox(

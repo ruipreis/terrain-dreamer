@@ -4,7 +4,6 @@ import time
 from pathlib import Path
 
 import torch
-
 import wandb
 
 # Load the dataset

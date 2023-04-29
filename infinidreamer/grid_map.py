@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import torch
 
+
 class GridMap:
     def __init__(self, grid_size, spacing, clustered_images, deepfill_model, device):
         self.grid_size = grid_size
@@ -180,33 +181,56 @@ class GridMap:
 
         return grid_map
 
-    def apply_random_inpainting_old(self, grid_map, num_masks=10, min_scale_factor=0.1, max_scale_factor=0.4):
-        return self._inpaint_with_random_masks(grid_map, num_masks, min_scale_factor, max_scale_factor)
+    def apply_random_inpainting_old(
+        self, grid_map, num_masks=10, min_scale_factor=0.1, max_scale_factor=0.4
+    ):
+        return self._inpaint_with_random_masks(
+            grid_map, num_masks, min_scale_factor, max_scale_factor
+        )
 
-    def apply_random_inpainting_in_windows_old(self, grid_map, window_size=256, step=160, num_masks=20, min_scale_factor=0.1, max_scale_factor=0.4):
+    def apply_random_inpainting_in_windows_old(
+        self,
+        grid_map,
+        window_size=256,
+        step=160,
+        num_masks=20,
+        min_scale_factor=0.1,
+        max_scale_factor=0.4,
+    ):
         height, width, _ = grid_map.shape
 
         for y in range(0, height - window_size + 1, step):
             for x in range(0, width - window_size + 1, step):
                 window = grid_map[y : y + window_size, x : x + window_size]
-                window = self._inpaint_with_random_masks(window, num_masks, min_scale_factor, max_scale_factor)
+                window = self._inpaint_with_random_masks(
+                    window, num_masks, min_scale_factor, max_scale_factor
+                )
                 grid_map[y : y + window_size, x : x + window_size] = window
 
         return grid_map
 
-    def _inpaint_with_random_masks(self, grid_map, num_masks=10, min_scale_factor=0.1, max_scale_factor=0.4):
+    def _inpaint_with_random_masks(
+        self, grid_map, num_masks=10, min_scale_factor=0.1, max_scale_factor=0.4
+    ):
         height, width, _ = grid_map.shape
 
         for i in range(num_masks):
             print(f"Processing random mask {i + 1}/{num_masks}")
 
             # Generate a random mask
-            top, left, mask_height, mask_width = self._random_bbox(height, width, min_scale_factor, max_scale_factor)
+            top, left, mask_height, mask_width = self._random_bbox(
+                height, width, min_scale_factor, max_scale_factor
+            )
             mask = np.zeros((height, width), dtype=np.uint8)
             mask[top : top + mask_height, left : left + mask_width] = 255
 
             # Normalize the image tensor to the range [-1, 1]
-            grid_map_tensor = (torch.tensor(grid_map, dtype=torch.float32).permute(2, 0, 1).unsqueeze(0) / 127.5) - 1.0
+            grid_map_tensor = (
+                torch.tensor(grid_map, dtype=torch.float32)
+                .permute(2, 0, 1)
+                .unsqueeze(0)
+                / 127.5
+            ) - 1.0
             masked_grid_map_tensor = grid_map_tensor.clone()
             masked_grid_map_tensor[:, :, (mask == 255)] = 0
 
@@ -215,28 +239,51 @@ class GridMap:
             mask_tensor = mask_tensor.unsqueeze(0).unsqueeze(0)
 
             # Run the inpainting model
-            _, output = self.deepfill_model(masked_grid_map_tensor.to(self.device), mask_tensor.to(self.device))
+            _, output = self.deepfill_model(
+                masked_grid_map_tensor.to(self.device), mask_tensor.to(self.device)
+            )
 
             # Convert the output tensor back to the range [0, 255]
-            output_np = ((output.squeeze(0).permute(1, 2, 0).cpu().detach().numpy() + 1) * 127.5).astype(np.uint8)
+            output_np = (
+                (output.squeeze(0).permute(1, 2, 0).cpu().detach().numpy() + 1) * 127.5
+            ).astype(np.uint8)
             mask_indices = np.where(mask == 255)
             grid_map[mask_indices] = output_np[mask_indices]
 
         return grid_map
-    
-    def apply_random_inpainting_in_windows(self, grid_map, window_size=256, step=160, num_iterations=15, min_scale_factor=0.1, max_scale_factor=0.4):
+
+    def apply_random_inpainting_in_windows(
+        self,
+        grid_map,
+        window_size=256,
+        step=160,
+        num_iterations=15,
+        min_scale_factor=0.1,
+        max_scale_factor=0.4,
+    ):
         for iteration in range(num_iterations):
             print(f"Iteration {iteration + 1}/{num_iterations}")
-            grid_map = self._apply_random_inpainting_in_windows_once(grid_map, window_size, step, min_scale_factor, max_scale_factor)
+            grid_map = self._apply_random_inpainting_in_windows_once(
+                grid_map, window_size, step, min_scale_factor, max_scale_factor
+            )
         return grid_map
 
-    def _apply_random_inpainting_in_windows_once(self, grid_map, window_size=256, step=160, min_scale_factor=0.1, max_scale_factor=0.4):
+    def _apply_random_inpainting_in_windows_once(
+        self,
+        grid_map,
+        window_size=256,
+        step=160,
+        min_scale_factor=0.1,
+        max_scale_factor=0.4,
+    ):
         height, width, _ = grid_map.shape
 
         for y in range(0, height - window_size + 1, step):
             for x in range(0, width - window_size + 1, step):
                 window = grid_map[y : y + window_size, x : x + window_size]
-                window = self._inpaint_with_random_masks(window, 3, min_scale_factor, max_scale_factor)
+                window = self._inpaint_with_random_masks(
+                    window, 3, min_scale_factor, max_scale_factor
+                )
                 grid_map[y : y + window_size, x : x + window_size] = window
 
         return grid_map

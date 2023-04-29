@@ -144,3 +144,4 @@ dataset_aw3d30
 logs
 wandb
 *.pth
+*.h5

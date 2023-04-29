@@ -1,11 +1,13 @@
+from pathlib import Path
+
 import torch
 import torch.nn as nn
-from pathlib import Path
+
+from terrdreamer.models.infinity_grid.critics import GlobalCritic, LocalCritic
 from terrdreamer.models.infinity_grid.layers import CoarseNetwork, RefinementNetwork
-from terrdreamer.models.infinity_grid.critics import LocalCritic, GlobalCritic
 from terrdreamer.models.infinity_grid.loss import (
-    WGAN_GradientPenalty,
     WeightedL1Loss,
+    WGAN_GradientPenalty,
     WGAN_Loss,
     create_weight_mask,
 )

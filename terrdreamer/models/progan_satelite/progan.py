@@ -6,6 +6,7 @@ import torch.nn.functional as F
 
 factors = [1, 1, 1, 1, 1 / 2, 1 / 4, 1 / 8]
 
+
 # Equalized Learning Rate (Equalized Convolutional Layer)
 class WSConv2d(nn.Module):
     def __init__(
@@ -13,7 +14,7 @@ class WSConv2d(nn.Module):
     ):
         super(WSConv2d, self).__init__()
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding)
-        self.scale = (gain / (in_channels * (kernel_size ** 2))) ** 0.5
+        self.scale = (gain / (in_channels * (kernel_size**2))) ** 0.5
         self.bias = self.conv.bias
         self.conv.bias = None
 
@@ -32,7 +33,7 @@ class PixelNorm(nn.Module):
         self.epsilon = 1e-8
 
     def forward(self, x):
-        return x / torch.sqrt(torch.mean(x ** 2, dim=1, keepdim=True) + self.epsilon)
+        return x / torch.sqrt(torch.mean(x**2, dim=1, keepdim=True) + self.epsilon)
 
 
 # Regular Convolution Block with Pixel Normalization
@@ -162,7 +163,6 @@ class Discriminator(nn.Module):
         return torch.cat([x, batch_stats], dim=1)
 
     def forward(self, x, alpha, steps):
-
         current_step = len(self.conv_blocks) - steps
 
         out = self.leaky(self.rgb_layers[current_step](x))
@@ -193,7 +193,6 @@ if __name__ == "__main__":
     discriminator = Discriminator(in_channels, image_channels)
 
     for image_size in [4, 8, 16, 32, 64, 128, 256]:
-
         steps = int(log2(image_size / 4))
         x = torch.randn(1, latent_size, 1, 1)
         z = generator(x, alpha, steps)
