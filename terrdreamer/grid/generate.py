@@ -64,29 +64,8 @@ def get_random_features(
     return rand_sat, feature_vectors
 
 
-def beta_sinalizer(i, delta: float):
-    return i * (1 + delta)
-
-
-def mask_interval(i, delta):
-    beta = beta_sinalizer(i, delta)
-    return (beta - delta, beta)
-
-
-def grid_interval(i, delta):
-    beta1 = beta_sinalizer(i, delta)
-    beta2 = beta_sinalizer(i + 1, delta)
-    return (beta1, beta2 - delta)
-
-
-def inpainting_interval(i, delta):
-    beta = beta_sinalizer(i, delta)
-    upsilon = beta - delta / 2
-    return (upsilon - 0.5, upsilon + 0.5)
-
-
 def probability_fake_tile(delta):
-    return 1 - (1 / ((2 * delta + 1) ** 2))
+    return 1 - (1 / (2 * delta + 1))
 
 
 # Calculates the amount of real and fake tiles a grid is expected to have
@@ -94,7 +73,7 @@ def get_num_real_fake_tiles(H: int, W: int, delta: int):
     P_b = probability_fake_tile(delta)
 
     # Number of fake tiles
-    num_fake_tiles = math.floor(H * W * P_b)
+    num_fake_tiles = math.floor(H * W * (P_b**2))
     num_real_tiles = H * W - num_fake_tiles
 
     return num_real_tiles, num_fake_tiles
