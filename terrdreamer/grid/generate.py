@@ -64,17 +64,14 @@ def get_random_features(
     return rand_sat, feature_vectors
 
 
-def probability_fake_tile(delta):
-    return 1 - (1 / (2 * delta + 1))
-
-
 # Calculates the amount of real and fake tiles a grid is expected to have
 def get_num_real_fake_tiles(H: int, W: int, delta: int):
-    P_b = probability_fake_tile(delta)
+    relevant_rows = (H + delta - 1) // delta
+    relevant_cols = (W + delta - 1) // delta
+    num_real_tiles = relevant_rows * relevant_cols
 
     # Number of fake tiles
-    num_fake_tiles = math.floor(H * W * (P_b**2))
-    num_real_tiles = H * W - num_fake_tiles
+    num_fake_tiles = H * W - num_real_tiles
 
     return num_real_tiles, num_fake_tiles
 

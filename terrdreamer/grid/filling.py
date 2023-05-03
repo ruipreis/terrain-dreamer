@@ -27,6 +27,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--delta", type=float, default=0.5)
+    parser.add_argument("--inter-real-tile-spacing", type=int, default=3)
     parser.add_argument("--height", type=int, default=100)
     parser.add_argument("--width", type=int, default=100)
     parser.add_argument("--tile-size", type=int, default=256)
