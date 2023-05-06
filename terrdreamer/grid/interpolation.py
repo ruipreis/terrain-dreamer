@@ -7,6 +7,7 @@ from qdrant_client import QdrantClient
 
 from terrdreamer.grid.run import get_client
 from tqdm import tqdm
+from qdrant_client.http import models
 
 
 class QdrantWrapper:
@@ -17,32 +18,35 @@ class QdrantWrapper:
     def search(
         self, collection_name: str, query_vector: List[float], top_k: int
     ) -> List[int]:
-        current_top_k = top_k
-        results = []
+        query_result = self.qdrant_client.search(
+            collection_name=collection_name,
+            query_vector=query_vector,
+            top_k=top_k,
+            limit=top_k,
+            params={
+                "id_only": "true",
+            },
+        )
 
-        while len(results) < top_k:
-            query_result = self.qdrant_client.search(
-                collection_name=collection_name,
-                query_vector=query_vector,
-                top_k=current_top_k,
-                limit=current_top_k,
-                params={"id_only": "true"},
-            )
+        results = [result.id for result in query_result]
+        self.sampled_ids.update(results)
+        self.delete(collection_name, results)
 
-            new_results = [
-                result for result in query_result if result.id not in self.sampled_ids
-            ]
-            results.extend(new_results)
-            self.sampled_ids.update(result.id for result in new_results)
+        return results
 
-            # Increase the top_k for the next query to account for already sampled IDs
-            current_top_k *= 2
+    def delete(self, collection_name: str, ids: List[int]):
+        self.qdrant_client.delete(
+            collection_name=collection_name,
+            points_selector=models.PointIdsList(
+                points=ids,
+            ),
+        )
 
-            print(len(query_result))
-
-        results = [result.id for result in results]
-
-        return results[:top_k]
+    def count_elements(self, collection_name: str) -> int:
+        collection_stats = self.qdrant_client.get_collection(
+            collection_name=collection_name
+        )
+        return collection_stats.points_count
 
 
 def sort_arrays_by_first(arr1, arr2):
@@ -76,11 +80,17 @@ def weighted_average(
     matrix,
     tile_index_grid,
     tiles,
+    real_tiles,
     features,
     num_neighbors,
     out_path: str,
     qdrant_wrapper: QdrantWrapper,
 ):
+    print(
+        "There are a total of fake tiles in qdrant:",
+        qdrant_wrapper.count_elements("fake_tiles"),
+    )
+
     # Get the indices of non-zero and zero values
     non_zero_indices = np.argwhere(matrix != 0)
     zero_indices = np.argwhere(matrix == 0)
@@ -109,11 +119,22 @@ def weighted_average(
                 top_k=1,
             )[0]
 
+            print("Closest tile: {}".format(closest_tile))
+
             # Retrieve the tile from the fake_tiles dataset
             fake_tile = tiles[closest_tile]
 
             # Write to h5 file, with the key being the tuple of the zero_idx
             h5_file.create_dataset(str(tuple(zero_idx)), data=fake_tile)
+
+        # Also add the non zero values to the hdf5 file
+        for non_zero_idx in non_zero_indices:
+            h5_file.create_dataset(
+                str(tuple(non_zero_idx)),
+                data=real_tiles[tile_index_grid[non_zero_idx[0], non_zero_idx[1]]],
+            )
+
+    print("Total distinct sampled tiles: {}".format(len(qdrant_wrapper.sampled_ids)))
 
     return matrix
 
@@ -133,13 +154,14 @@ with h5py.File("real_tiles.h5", "r") as h5_file:
         random_ordering = np.random.permutation(n_real_tiles)
 
         # generate a grid
-        grid, tile_index = generate_grid(100, 100, 3, random_ordering)
+        grid, tile_index = generate_grid(20, 20, 3, random_ordering)
 
         num_neighbors = 3
         result = weighted_average(
             grid,
             tile_index,
             fake_tiles,
+            tiles,
             features,
             num_neighbors,
             "weighted_average.h5",

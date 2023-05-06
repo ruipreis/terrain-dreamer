@@ -145,8 +145,8 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--height", type=int, default=100)
-    parser.add_argument("--width", type=int, default=100)
+    parser.add_argument("--height", type=int, default=20)
+    parser.add_argument("--width", type=int, default=20)
     parser.add_argument("--delta", type=int, default=3)
     parser.add_argument("--batch-size", type=int, default=30)
     parser.add_argument("--pool-size", type=int, default=4)
