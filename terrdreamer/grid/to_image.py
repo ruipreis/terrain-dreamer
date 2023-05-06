@@ -1,6 +1,7 @@
 from PIL import Image
 import numpy as np
 import h5py
+import cv2
 
 
 def to_image(grid, h5_file, tile_size=(256, 256)):
@@ -23,6 +24,12 @@ def to_image(grid, h5_file, tile_size=(256, 256)):
     return result_image
 
 
-with h5py.File("weighted_average.h5", "r") as h5_file:
-    image = to_image((20, 20), h5_file)
-    image.save("output_image.png")
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--file", type=str, default="inpainting.h5")
+    args = parser.parse_args()
+
+    with h5py.File(args.file, "r") as h5_file:
+        cv2.imwrite("output_image.png", h5_file["tiles"][:])
