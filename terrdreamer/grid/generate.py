@@ -58,7 +58,6 @@ def get_random_features(
     rand_sat = np.transpose(rand_sat, (0, 2, 3, 1))
 
     # Flip the last dimension to be in BGR format
-    rand_sat = rand_sat[:, :, :, ::-1]
     rand_sat = rand_sat.astype(np.uint8)
 
     return rand_sat, feature_vectors
@@ -96,7 +95,6 @@ def generate_saveable_samples(
             "tiles",
             shape=(num_tiles, 256, 256, 3),
             dtype=np.uint8,
-            chunks=(batch_size, 256, 256, 3),
         )
 
         if type == "real":
@@ -104,7 +102,6 @@ def generate_saveable_samples(
                 "features",
                 shape=(num_tiles, feature_extractor.get_dim()),
                 dtype=np.float32,
-                chunks=(batch_size, feature_extractor.get_dim()),
             )
         else:
             features = None
@@ -145,8 +142,8 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--height", type=int, default=20)
-    parser.add_argument("--width", type=int, default=20)
+    parser.add_argument("--height", type=int, default=100)
+    parser.add_argument("--width", type=int, default=100)
     parser.add_argument("--delta", type=int, default=3)
     parser.add_argument("--batch-size", type=int, default=30)
     parser.add_argument("--pool-size", type=int, default=4)

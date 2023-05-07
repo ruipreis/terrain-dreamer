@@ -154,7 +154,7 @@ with h5py.File("real_tiles.h5", "r") as h5_file:
         random_ordering = np.random.permutation(n_real_tiles)
 
         # generate a grid
-        grid, tile_index = generate_grid(20, 20, 3, random_ordering)
+        grid, tile_index = generate_grid(100, 100, 3, random_ordering)
 
         num_neighbors = 3
         result = weighted_average(
