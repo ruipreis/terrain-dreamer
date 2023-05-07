@@ -163,9 +163,9 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--delta", type=float, default=0.3)
-    parser.add_argument("--inter-real-tile-spacing", type=int, default=3)
-    parser.add_argument("--height", type=int, default=100)
-    parser.add_argument("--width", type=int, default=100)
+    parser.add_argument("--inter-real-tile-spacing", type=int, default=4)
+    parser.add_argument("--height", type=int, default=50)
+    parser.add_argument("--width", type=int, default=50)
     parser.add_argument("--tile-size", type=int, default=256)
     parser.add_argument("--device", type=str, default="cuda")
     parser.add_argument("--grid-file", type=str, default="weighted_average.h5")
@@ -173,7 +173,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch-size", type=int, default=24)
 
     # The number of random inpaintings to perform on each inpainted tile
-    parser.add_argument("--n-random-inpaintings", type=int, default=5)
+    parser.add_argument("--n-random-inpaintings", type=int, default=10)
 
     args = parser.parse_args()
 

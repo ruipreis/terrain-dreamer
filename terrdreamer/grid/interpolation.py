@@ -139,33 +139,44 @@ def weighted_average(
     return matrix
 
 
-with h5py.File("real_tiles.h5", "r") as h5_file:
-    tiles = h5_file["tiles"]
-    features = h5_file["features"]
+if __name__ == "__main__":
+    import argparse
 
-    with h5py.File("fake_tiles.h5", "r") as fake_tiles_file:
-        fake_tiles = fake_tiles_file["tiles"]
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--num-neighbors", type=int, default=3)
+    parser.add_argument("--height", type=int, default=50)
+    parser.add_argument("--width", type=int, default=50)
+    parser.add_argument("--delta", type=int, default=4)
+    args = parser.parse_args()
 
-        n_real_tiles = tiles.shape[0]
+    with h5py.File("real_tiles.h5", "r") as h5_file:
+        tiles = h5_file["tiles"]
+        features = h5_file["features"]
 
-        print("There are {} real tiles".format(n_real_tiles))
+        with h5py.File("fake_tiles.h5", "r") as fake_tiles_file:
+            fake_tiles = fake_tiles_file["tiles"]
 
-        # create a random ordering of these tiles
-        random_ordering = np.random.permutation(n_real_tiles)
+            n_real_tiles = tiles.shape[0]
 
-        # generate a grid
-        grid, tile_index = generate_grid(100, 100, 3, random_ordering)
+            print("There are {} real tiles".format(n_real_tiles))
 
-        num_neighbors = 3
-        result = weighted_average(
-            grid,
-            tile_index,
-            fake_tiles,
-            tiles,
-            features,
-            num_neighbors,
-            "weighted_average.h5",
-            QdrantWrapper(get_client()),
-        )
-        print("\nMatrix after weighted average:")
-        print(result)
+            # create a random ordering of these tiles
+            random_ordering = np.random.permutation(n_real_tiles)
+
+            # generate a grid
+            grid, tile_index = generate_grid(
+                args.height, args.width, args.delta, random_ordering
+            )
+
+            result = weighted_average(
+                grid,
+                tile_index,
+                fake_tiles,
+                tiles,
+                features,
+                args.num_neighbors,
+                "weighted_average.h5",
+                QdrantWrapper(get_client()),
+            )
+            print("\nMatrix after weighted average:")
+            print(result)

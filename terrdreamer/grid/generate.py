@@ -142,11 +142,12 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--height", type=int, default=100)
-    parser.add_argument("--width", type=int, default=100)
-    parser.add_argument("--delta", type=int, default=3)
+    parser.add_argument("--height", type=int, default=50)
+    parser.add_argument("--width", type=int, default=50)
+    parser.add_argument("--delta", type=int, default=4)
     parser.add_argument("--batch-size", type=int, default=30)
     parser.add_argument("--pool-size", type=int, default=4)
+    parser.add_argument("--fake-tiles-factor", type=float, default=2.0)
     parser.add_argument("--real-h5-file", type=str, default="real_tiles.h5")
     parser.add_argument("--fake-h5-file", type=str, default="fake_tiles.h5")
     parser.add_argument("--device", type=str, default="cuda")
@@ -159,6 +160,11 @@ if __name__ == "__main__":
     num_real_tiles, num_fake_tiles = get_num_real_fake_tiles(
         args.height, args.width, args.delta
     )
+
+    # Increase the number of fake tiles by the factor
+    num_fake_tiles = int(num_fake_tiles * args.fake_tiles_factor)
+
+    logging.info(f"Fake tiles factor: {args.fake_tiles_factor}")
     logging.info(f"Number of real tiles: {num_real_tiles}")
     logging.info(f"Number of fake tiles: {num_fake_tiles}")
 

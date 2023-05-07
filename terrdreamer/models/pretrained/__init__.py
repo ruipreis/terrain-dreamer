@@ -36,7 +36,7 @@ def check_and_download_pretrained_model(model_base_name, file_id):
     return res_path
 
 
-def convert_dem_batch(dem_batch):
+def convert_dem_batch(dem_batch, repeat=True):
     # Convert the DEM to a 3-channel image
     dem_batch = (dem_batch + 1) / 2
 
@@ -61,8 +61,9 @@ def convert_dem_batch(dem_batch):
     # Put in range (-1, 1)
     dem_batch = dem_batch * 2 - 1
 
-    # Convert the DEM to a 3-channel image
-    dem_batch = dem_batch.repeat(1, 3, 1, 1)
+    if repeat:
+        # Convert the DEM to a 3-channel image
+        dem_batch = dem_batch.repeat(1, 3, 1, 1)
 
     return dem_batch
 
@@ -91,6 +92,10 @@ class PretrainedImageToDEM(nn.Module):
 
     def forward(self, x) -> torch.tensor:
         return self.pix2pix.generator(x)
+
+    def to(self, device):
+        self.pix2pix.generator.to(device)
+        return self
 
 
 class PretrainedDEMToImage(nn.Module):
