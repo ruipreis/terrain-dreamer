@@ -1,10 +1,12 @@
-import random
-import h5py
 import math
+import random
+
+import h5py
 import numpy as np
-from terrdreamer.models.pretrained import PretrainedDeepfillV1
-from tqdm import tqdm
 import torch
+from tqdm import tqdm
+
+from terrdreamer.models.pretrained import PretrainedDeepfillV1
 
 
 def random_crop_with_point(image_shape, crop_size, point):

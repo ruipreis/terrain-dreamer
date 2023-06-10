@@ -1,11 +1,11 @@
 import argparse
-import h5py
 
-from terrdreamer.models.pretrained import PretrainedImageToDEM
+import h5py
+import numpy as np
 import torch
 from tqdm import tqdm
-from terrdreamer.models.pretrained import convert_dem_batch
-import numpy as np
+
+from terrdreamer.models.pretrained import PretrainedImageToDEM, convert_dem_batch
 
 
 def vector_linspace(v1, v2, num_points=10):

@@ -1,13 +1,13 @@
-import numpy as np
-from scipy.spatial import KDTree
-import h5py
-
 from typing import List
+
+import h5py
+import numpy as np
 from qdrant_client import QdrantClient
+from qdrant_client.http import models
+from scipy.spatial import KDTree
+from tqdm import tqdm
 
 from terrdreamer.grid.run import get_client
-from tqdm import tqdm
-from qdrant_client.http import models
 
 
 class QdrantWrapper:

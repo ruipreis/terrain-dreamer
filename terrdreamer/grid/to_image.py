@@ -1,7 +1,7 @@
-from PIL import Image
-import numpy as np
-import h5py
 import cv2
+import h5py
+import numpy as np
+from PIL import Image
 
 if __name__ == "__main__":
     import argparse
