@@ -25,3 +25,10 @@ It is assumed user has access to a service account with access to Google Earth A
 - `apt install libgdal-dev`
     - The `libgdal-dev` package is required for the `gdal` Python package and should have matching versions.
 - `requirements.txt`
+
+## Inspiration
+
+The image-to-dem and dem-to-image components of this work take inspiration from the following works by [Emmanouil Panagiotou](https://github.com/Panagiotou), namely:
+
+- **image-to-dem**: [Generating Elevation Surface from a Single RGB Remotely Sensed Image Using Deep Learning][https://github.com/Panagiotou/ImageToDEM].
+- **dem-to-image**: [Procedural 3D Terrain Generation using Generative Adversarial Networks](https://github.com/Panagiotou/Procedural3DTerrain).

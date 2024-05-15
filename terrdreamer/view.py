@@ -4,8 +4,8 @@ from typing import Tuple
 import numpy as np
 from mayavi import mlab
 from PIL import Image
-from tvtk.api import tvtk
 from scipy.ndimage import gaussian_filter
+from tvtk.api import tvtk
 
 
 def smooth_heightmap(heightmap: np.ndarray, sigma: float = 2.0) -> np.ndarray:
@@ -67,6 +67,7 @@ def draw_geo_surface(
 if __name__ == "__main__":
     import argparse
     from pathlib import Path
+
     from terrdreamer.dataset import AW3D30Dataset
 
     parser = argparse.ArgumentParser()
