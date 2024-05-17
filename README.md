@@ -9,8 +9,8 @@
 
 - Clone the repository and install it as a package:
   ```bash
-  git clone <repository-url>
-  cd <repository-directory>
+  git clone https://github.com/ruipreis/terrain-dreamer.git
+  cd terrain-dreamer
   pip install .
   ```
 - Download the available checkpoints if you want to experiment without training the models from scratch.
