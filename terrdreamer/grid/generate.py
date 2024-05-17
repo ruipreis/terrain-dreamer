@@ -20,8 +20,8 @@ logger = logging.getLogger("httpcore")
 logger.setLevel(logging.WARNING)
 
 
-def get_tile_manager_context(collection_name: str = "fake-tiles", device: str = "cuda"):
-    progan_model = PretrainedProGAN()
+def get_tile_manager_context(model_path:str,collection_name: str = "fake-tiles", device: str = "cuda"):
+    progan_model = PretrainedProGAN(model_path)
     progan_model = progan_model.to(device)
 
     # Load a feature extractor
@@ -140,9 +140,10 @@ def generate_saveable_samples(
 
 if __name__ == "__main__":
     import argparse
+    from pathlib import Path
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--height", type=int, default=50)
+    parser.add_argument("--height", type=int, default=25)
     parser.add_argument("--width", type=int, default=50)
     parser.add_argument("--delta", type=int, default=4)
     parser.add_argument("--batch-size", type=int, default=30)
@@ -152,6 +153,7 @@ if __name__ == "__main__":
     parser.add_argument("--fake-h5-file", type=str, default="fake_tiles.h5")
     parser.add_argument("--device", type=str, default="cuda")
     parser.add_argument("--collection-name", type=str, default="fake_tiles")
+    parser.add_argument("--progan-model-path", type=Path, default="checkpoints/progan-satelite/generator.pth")
     args = parser.parse_args()
 
     logging.debug("Finished parsing arguments: " + str(vars(args)))
@@ -170,7 +172,7 @@ if __name__ == "__main__":
 
     logging.debug("Starting tile manager context")
     progan, feature_extractor, qdrant_client = get_tile_manager_context(
-        collection_name=args.collection_name, device=args.device
+        args.progan_model_path, collection_name=args.collection_name, device=args.device,
     )
 
     generate_saveable_samples(

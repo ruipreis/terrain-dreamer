@@ -69,14 +69,9 @@ def convert_dem_batch(dem_batch, repeat=True):
 
 
 class PretrainedImageToDEM(nn.Module):
-    GENERATOR_FILE_NAME = "image_to_dem_generator.pt"
-    FILE_ID = "1FfRDMAHhiKQh29TDQcGfBPb0x9mZNVkz"
-
-    def __init__(self, use_instance_norm=False):
+    def __init__(self, model_path: str, use_instance_norm=False):
         super().__init__()
-        self.model_path = check_and_download_pretrained_model(
-            self.GENERATOR_FILE_NAME, self.FILE_ID
-        )
+        self.model_path = model_path
 
         # Create the model
         self.pix2pix = DEM_Pix2Pix(3, 1, inference=True)
@@ -125,20 +120,14 @@ class PretrainedDEMToImage(nn.Module):
 
 
 class PretrainedProGAN(nn.Module):
-    GENERATOR_FILE_NAME = "progan_generator.pth"
-    FILE_ID = "1okMqM3D35wuFk4ZznYycYEVVF95uyJV2"
-
-    def __init__(self):
+    def __init__(self, model_path: str):
         super().__init__()
-        self.model_path = check_and_download_pretrained_model(
-            self.GENERATOR_FILE_NAME, self.FILE_ID
-        )
 
         # Create the model
         self.progan = Generator(256, 256, 3)
 
         # Load the pretrained model
-        self.progan.load_state_dict(torch.load(self.model_path))
+        self.progan.load_state_dict(torch.load(model_path))
 
         # Make sure the gradient is not computed
         self.progan.eval()
@@ -152,10 +141,8 @@ class PretrainedDeepfillV1:
     GENERATOR_FILE_NAME = "deepfillv1_generator.pth"
     FILE_ID = "16lStlTfhLSNsGFAmRvAWoXaLssGHFobu"
 
-    def __init__(self):
-        self.model_path = check_and_download_pretrained_model(
-            self.GENERATOR_FILE_NAME, self.FILE_ID
-        )
+    def __init__(self, model_path: str):
+        self.model_path = model_path
 
         # Create the model
         self.deepfillv1 = DeepFillV1(inference=True)

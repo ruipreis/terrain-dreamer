@@ -21,11 +21,7 @@ class QdrantWrapper:
         query_result = self.qdrant_client.search(
             collection_name=collection_name,
             query_vector=query_vector,
-            top_k=top_k,
             limit=top_k,
-            params={
-                "id_only": "true",
-            },
         )
 
         results = [result.id for result in query_result]
@@ -144,7 +140,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--num-neighbors", type=int, default=3)
-    parser.add_argument("--height", type=int, default=50)
+    parser.add_argument("--height", type=int, default=25)
     parser.add_argument("--width", type=int, default=50)
     parser.add_argument("--delta", type=int, default=4)
     args = parser.parse_args()

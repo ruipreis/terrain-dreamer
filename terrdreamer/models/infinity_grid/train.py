@@ -5,10 +5,10 @@ from typing import Tuple
 
 import torch
 import torchvision
-import wandb
 from torchvision.transforms import RandomCrop
 from tqdm import tqdm
 
+import wandb
 from terrdreamer.dataset import AW3D30Dataset
 from terrdreamer.models.infinity_grid import DeepFillV1
 
@@ -50,6 +50,9 @@ def train(
     min_scale_factor: float = 0.3,
     max_scale_factor: float = 0.6,
 ):
+    # Ensure path to place the model exists
+    save_model_path.mkdir(parents=True, exist_ok=True)
+
     # Instantiate the dataset
     dataset = AW3D30Dataset(train_dataset, limit=limit)
     test_dataset = AW3D30Dataset(test_dataset, limit=limit // 10)

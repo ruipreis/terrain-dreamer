@@ -75,21 +75,23 @@ if __name__ == "__main__":
     parser.add_argument("--dim", type=int, default=2048)
     parser.add_argument("--collection-name", type=str, default="satelite_grids")
     parser.add_argument("--image-dir", type=Path, default="data/satelite_images")
+    parser.add_argument("--device", type=str, default="cuda")
+    parser.add_argument("--progan-model-path", type=Path, default="checkpoints/progan-satelite/generator.pth")
     args = parser.parse_args()
 
-    image_dir = args.image_dir
+    image_dir = args.image_dir 
     collection_name = args.collection_name
     batch_size = args.batch_size
     n_batches = args.n_batches
 
     image_dir.mkdir(exist_ok=True, parents=True)
 
-    progan_model = PretrainedProGAN()
-    progan_model = progan_model.to("cuda")
+    progan_model = PretrainedProGAN(args.progan_model_path)
+    progan_model = progan_model.to(args.device)
 
     # Load a feature extractor
     feature_extractor = FeatureVectorExtractor()
-    feature_extractor = feature_extractor.to("cuda")
+    feature_extractor = feature_extractor.to(args.device)
 
     # Instantiate a Qdrant client and recreate the collection
     client = get_client()

@@ -33,16 +33,23 @@ def vector_linspace(v1, v2, num_points=10):
 
 
 if __name__ == "__main__":
+    from pathlib import Path
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--file", type=str, default="inpainting.h5")
     parser.add_argument("--tile-size", type=int, default=256)
     parser.add_argument("--device", type=str, default="cuda")
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--delta", type=int, default=10)
+    parser.add_argument(
+        "--dem-model-path", type=Path, default="checkpoints/image_to_dem/generator.pt"
+    )
     args = parser.parse_args()
 
     # Instantiate the model for DEM estimation
-    dem_model = PretrainedImageToDEM(use_instance_norm=True).to(args.device)
+    dem_model = PretrainedImageToDEM(args.dem_model_path, use_instance_norm=True).to(
+        args.device
+    )
 
     with h5py.File(args.file, "a") as h5_file:
         tiles = h5_file["tiles"]
@@ -89,9 +96,9 @@ if __name__ == "__main__":
 
                     # Add the DEM to the dataset
                     for single_dem, (i, j) in zip(dem, batch_indices):
-                        dems[
-                            i : i + args.tile_size, j : j + args.tile_size
-                        ] = single_dem
+                        dems[i : i + args.tile_size, j : j + args.tile_size] = (
+                            single_dem
+                        )
 
                     # Clear the batch
                     batch = []
@@ -118,21 +125,19 @@ if __name__ == "__main__":
                 dem1 = dems[i : i + args.tile_size, [j - args.delta, j + args.delta], 0]
 
                 # Fill the gap with the linspace between the two DEMs
-                dems[
-                    i : i + args.tile_size, (j - args.delta) : (j + args.delta)
-                ] = vector_linspace(dem1[..., 0], dem1[..., 1], 2 * args.delta)[
-                    ..., None
-                ]
+                dems[i : i + args.tile_size, (j - args.delta) : (j + args.delta)] = (
+                    vector_linspace(dem1[..., 0], dem1[..., 1], 2 * args.delta)[
+                        ..., None
+                    ]
+                )
 
         for i in range(args.tile_size, height, args.tile_size):
             for j in range(0, width, args.tile_size):
                 dem1 = dems[[i - args.delta, i + args.delta], j : j + args.tile_size, 0]
 
                 # Fill the gap with the linspace between the two DEMs
-                dems[
-                    (i - args.delta) : (i + args.delta), j : j + args.tile_size
-                ] = np.swapaxes(
-                    vector_linspace(dem1[0], dem1[1], 2 * args.delta), 0, 1
-                )[
-                    ..., None
-                ]
+                dems[(i - args.delta) : (i + args.delta), j : j + args.tile_size] = (
+                    np.swapaxes(
+                        vector_linspace(dem1[0], dem1[1], 2 * args.delta), 0, 1
+                    )[..., None]
+                )

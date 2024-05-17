@@ -162,18 +162,23 @@ def process_batch(model, batch_tiles, batch_masks, device):
 
 if __name__ == "__main__":
     import argparse
+    from pathlib import Path
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--delta", type=float, default=0.3)
     parser.add_argument("--inter-real-tile-spacing", type=int, default=4)
-    parser.add_argument("--height", type=int, default=50)
+    parser.add_argument("--height", type=int, default=25)
     parser.add_argument("--width", type=int, default=50)
     parser.add_argument("--tile-size", type=int, default=256)
     parser.add_argument("--device", type=str, default="cuda")
     parser.add_argument("--grid-file", type=str, default="weighted_average.h5")
     parser.add_argument("--out-grid-file", type=str, default="inpainting.h5")
     parser.add_argument("--batch-size", type=int, default=24)
-
+    parser.add_argument(
+        "--deepfill-model-path",
+        type=Path,
+        default="checkpoints/inpainting/inpaint_generator.pth",
+    )
     # The number of random inpaintings to perform on each inpainted tile
     parser.add_argument("--n-random-inpaintings", type=int, default=10)
 
@@ -222,7 +227,7 @@ if __name__ == "__main__":
     delta_adjustment_constant = 0.5 - args.delta / 2
 
     # Instantiate a model to perform inpainting on the tiles
-    model = PretrainedDeepfillV1().to(args.device)
+    model = PretrainedDeepfillV1(args.deepfill_model_path).to(args.device)
 
     random_inpaintings = [
         (
